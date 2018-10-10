@@ -93,10 +93,7 @@ type
       Nullable: TZColumnNullableType; ReadOnly: Boolean;
       Writable: Boolean): TZColumnInfo;
     function GetColumnsInfoCollection: TObjectList;
-    function CompareArrays(Array1, Array2: TBytes): Boolean;
     procedure FillResultSet(ResultSet: IZResultSet; RecCount: integer);
-    function CompareStreams(Stream1, Stream2: TStream): boolean; overload;
-
   published
     procedure TestTraversalAndPositioning;
     procedure TestInsert;
@@ -110,57 +107,45 @@ type
   {** Defines an empty resolver class. }
   TZEmptyResolver = class(TInterfacedObject, IZCachedResolver)
   public
-    procedure CalculateDefaults(Sender: IZCachedResultSet;
+    procedure CalculateDefaults(const Sender: IZCachedResultSet;
       {%H-}RowAccessor: TZRowAccessor);
-    procedure PostUpdates(Sender: IZCachedResultSet; {%H-}UpdateType: TZRowUpdateType;
+    procedure PostUpdates(const Sender: IZCachedResultSet; {%H-}UpdateType: TZRowUpdateType;
       {%H-}OldRowAccessor, {%H-}NewRowAccessor: TZRowAccessor);
     {BEGIN of PATCH [1185969]: Do tasks after posting updates. ie: Updating AutoInc fields in MySQL }
-    procedure UpdateAutoIncrementFields(Sender: IZCachedResultSet;
+    procedure UpdateAutoIncrementFields(const Sender: IZCachedResultSet;
       {%H-}UpdateType: TZRowUpdateType;
-      {%H-}OldRowAccessor, {%H-}NewRowAccessor: TZRowAccessor; Resolver: IZCachedResolver); virtual;
+      {%H-}OldRowAccessor, {%H-}NewRowAccessor: TZRowAccessor; const Resolver: IZCachedResolver); virtual;
     {END of PATCH [1185969]: Do tasks after posting updates. ie: Updating AutoInc fields in MySQL }
-    procedure RefreshCurrentRow(Sender: IZCachedResultSet;RowAccessor: TZRowAccessor);
+    procedure RefreshCurrentRow(const Sender: IZCachedResultSet;RowAccessor: TZRowAccessor);
   end;
 
 implementation
 
-const
-  stBooleanIndex        = {$IFDEF GENERIC_INDEX}0{$ELSE}1{$ENDIF};
-  stByteIndex           = {$IFDEF GENERIC_INDEX}1{$ELSE}2{$ENDIF};
-  stShortIndex          = {$IFDEF GENERIC_INDEX}2{$ELSE}3{$ENDIF};
-  stSmallIndex          = {$IFDEF GENERIC_INDEX}3{$ELSE}4{$ENDIF};
-  stIntegerIndex        = {$IFDEF GENERIC_INDEX}4{$ELSE}5{$ENDIF};
-  stLongIndex           = {$IFDEF GENERIC_INDEX}5{$ELSE}6{$ENDIF};
-  stFloatIndex          = {$IFDEF GENERIC_INDEX}6{$ELSE}7{$ENDIF};
-  stDoubleIndex         = {$IFDEF GENERIC_INDEX}7{$ELSE}8{$ENDIF};
-  stBigDecimalIndex     = {$IFDEF GENERIC_INDEX}8{$ELSE}9{$ENDIF};
-  stStringIndex         = {$IFDEF GENERIC_INDEX}9{$ELSE}10{$ENDIF};
-  stBytesIndex          = {$IFDEF GENERIC_INDEX}10{$ELSE}11{$ENDIF};
-  stDateIndex           = {$IFDEF GENERIC_INDEX}11{$ELSE}12{$ENDIF};
-  stTimeIndex           = {$IFDEF GENERIC_INDEX}12{$ELSE}13{$ENDIF};
-  stTimestampIndex      = {$IFDEF GENERIC_INDEX}13{$ELSE}14{$ENDIF};
-  stAsciiStreamIndex    = {$IFDEF GENERIC_INDEX}14{$ELSE}15{$ENDIF};
-  stUnicodeStreamIndex  = {$IFDEF GENERIC_INDEX}15{$ELSE}16{$ENDIF};
-  stBinaryStreamIndex   = {$IFDEF GENERIC_INDEX}16{$ELSE}17{$ENDIF};
-{ TZTestCachedResultSetCase }
+uses ZClasses;
 
-{**
-  Compares two byte arrays
-  @param Array1 the first array to compare.
-  @param Array2 the second array to compare.
-  @return <code>True</code> if arrays are equal.
-}
-function TZTestCachedResultSetCase.CompareArrays(Array1,
-  Array2: TBytes): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  if High(Array2) <> High(Array1) then Exit;
-  for I := 0 to High(Array1) do
-    if Array1[I] <> Array2[I] then Exit;
-  Result := True;
-end;
+const
+  stBooleanIndex        = FirstDbcIndex + 0;
+  stByteIndex           = FirstDbcIndex + 1;
+  stShortIndex          = FirstDbcIndex + 2;
+  stSmallIndex          = FirstDbcIndex + 3;
+  stIntegerIndex        = FirstDbcIndex + 4;
+  stLongIndex           = FirstDbcIndex + 5;
+  stFloatIndex          = FirstDbcIndex + 6;
+  stDoubleIndex         = FirstDbcIndex + 7;
+  stBigDecimalIndex     = FirstDbcIndex + 8;
+  stStringIndex         = FirstDbcIndex + 9;
+  stBytesIndex          = FirstDbcIndex + 10;
+  stDateIndex           = FirstDbcIndex + 11;
+  stTimeIndex           = FirstDbcIndex + 12;
+  stTimestampIndex      = FirstDbcIndex + 13;
+  stAsciiStreamIndex    = FirstDbcIndex + 14;
+  stUnicodeStreamIndex  = FirstDbcIndex + 15;
+  stBinaryStreamIndex   = FirstDbcIndex + 16;
+
+  FirstIndex = stBooleanIndex;
+  LastIndex = stBinaryStreamIndex;
+
+{ TZTestCachedResultSetCase }
 
 procedure TZTestCachedResultSetCase.FillResultSet(
   ResultSet: IZResultSet; RecCount: Integer);
@@ -259,27 +244,20 @@ end;
   Setup paramters for test such as variables, stream datas and streams
 }
 procedure TZTestCachedResultSetCase.SetUp;
-var
-  BufferChar: PAnsiChar;
-  BufferWideChar: PWideChar;
 begin
   FDate := SysUtils.Date;
   FTime := SysUtils.Time;
   FTimeStamp := SysUtils.Now;
 
-  FAsciiStream := TMemoryStream.Create;
   FAsciiStreamData := 'Test Ascii Stream Data';
-  BufferChar := PAnsiChar(FAsciiStreamData);
-  FAsciiStream.Write(BufferChar^, Length(FAsciiStreamData));
+  FAsciiStream := StreamFromData(FAsciiStreamData);
 
-  FUnicodeStream := TMemoryStream.Create;
-  FUnicodeStreamData := 'Test Unikode Stream Data';
-  BufferWideChar := PWideChar(FUnicodeStreamData);
-  FUnicodeStream.Write(BufferWideChar^, Length(FUnicodeStreamData) * 2);
+  FUnicodeStreamData := 'Test Unicode Stream Data';
+  FUnicodeStream := StreamFromData(FUnicodeStreamData);
 
-  FBinaryStream := TMemoryStream.Create;
   FBinaryStreamData := AllocMem(BINARY_BUFFER_SIZE);
-  FBinaryStream.Write(FBinaryStreamData^, BINARY_BUFFER_SIZE);
+  FillChar(FBinaryStreamData^, BINARY_BUFFER_SIZE, 55);
+  FBinaryStream := StreamFromData(FBinaryStreamData, BINARY_BUFFER_SIZE);
 
   FBoolean := true;
   FByte := 255;
@@ -584,7 +562,7 @@ begin
         CheckEquals(FTimeStamp, GetTimestamp(stTimestampIndex), 0, 'GetTimestamp');
 
         ByteArray := GetBytes(stBytesIndex);
-        Check(CompareArrays(FByteArray, ByteArray));
+        CheckEquals(FByteArray, ByteArray);
 
         CheckEquals(False, FResultSet.WasNull, 'WasNull');
 
@@ -597,7 +575,7 @@ begin
         { AciiStream check }
         try
           Stream := GetAsciiStream(stAsciiStreamIndex);
-          Check(CompareStreams(Stream, FAsciiStream), 'AsciiStream');
+          CheckEquals(Stream, FAsciiStream, 'AsciiStream');
           Stream.Free;
         except
           Fail('Incorrect GetBinaryStream method behavior');
@@ -606,7 +584,7 @@ begin
         { UnicodeStream check }
         try
           Stream := GetUnicodeStream(stUnicodeStreamIndex);
-          Check(CompareStreams(Stream, FUnicodeStream), 'UnicodeStream');
+          CheckEquals(Stream, FUnicodeStream, 'UnicodeStream');
           Stream.Free;
         except
           Fail('Incorrect GetUnicodeStream method behavior');
@@ -615,7 +593,7 @@ begin
         { BinaryStream check }
         try
           Stream := GetBinaryStream(stBinaryStreamIndex);
-          Check(CompareStreams(Stream, FBinaryStream), 'BinaryStream');
+          CheckEquals(Stream, FBinaryStream, 'BinaryStream');
           Stream.Free;
         except
           Fail('Incorrect GetBinaryStream method behavior');
@@ -788,8 +766,8 @@ begin
       First;
       while Next do
       begin
-        for i := FirstDbcIndex to {$IFDEF GENERIC_INDEX}16{$ELSE}17{$ENDIF} do
-         Check(IsNull(I), 'The field '+IntToStr(I)+' did not still equals null');
+        for i := FirstIndex to LastIndex do
+          Check(IsNull(I), 'The field '+IntToStr(I)+' did not still equals null');
       end;
     end;
     FResultSet := nil;
@@ -828,12 +806,14 @@ begin
       try
         SetFetchDirection(fdReverse);
         Fail('Incorrect SetFetchDirection fdReverse behavior');
-      except
+      except on E: Exception do
+        CheckNotTestFailure(E);
       end;
       try
         SetFetchDirection(fdUnknown);
         Fail('Incorrect SetFetchDirection fdUnknown behavior');
-      except
+      except on E: Exception do
+        CheckNotTestFailure(E);
       end;
   }
 
@@ -858,34 +838,6 @@ begin
   finally
     Collection.Free;
   end;
-end;
-
-{**
-  Compare two streams.
-  @param the first stream
-  @param the second stream
-  @result if two streams equals then result true otherwise false
-}
-function TZTestCachedResultSetCase.CompareStreams(Stream1, Stream2: TStream):
-  Boolean;
-var
-  Buffer1, Buffer2: array[0..1024] of Char;
-  ReadNum1, ReadNum2: Integer;
-begin
-  CheckNotNull(Stream1, 'Stream #1 is null');
-  CheckNotNull(Stream2, 'Stream #2 is null');
-  CheckEquals(Stream1.Size, Stream2.Size, 'Stream sizes are not equal');
-
-  Stream1.Position := 0;
-  ReadNum1 := Stream1.Read(Buffer1, 1024);
-  Stream2.Position := 0;
-  ReadNum2 := Stream2.Read(Buffer2, 1024);
-
-  CheckEquals(ReadNum1, ReadNum2, 'Read sizes are not equal.');
-  Result := CompareMem(@Buffer1, @Buffer2, ReadNum1);
-
-  Stream1.Position := 0;
-  Stream2.Position := 0;
 end;
 
 {**
@@ -974,6 +926,8 @@ begin
   finally
     Collection.Free;
   end;
+
+  BlankCheck;
 end;
 
 {**
@@ -1033,7 +987,7 @@ end;
   @param Sender a cached result set object.
   @param RowAccessor an accessor object to column values.
 }
-procedure TZEmptyResolver.CalculateDefaults(Sender: IZCachedResultSet;
+procedure TZEmptyResolver.CalculateDefaults(const Sender: IZCachedResultSet;
   RowAccessor: TZRowAccessor);
 begin
 end;
@@ -1045,7 +999,7 @@ end;
   @param OldRowAccessor a row accessor which contains old column values.
   @param NewRowAccessor a row accessor which contains new column values.
 }
-procedure TZEmptyResolver.PostUpdates(Sender: IZCachedResultSet;
+procedure TZEmptyResolver.PostUpdates(const Sender: IZCachedResultSet;
   UpdateType: TZRowUpdateType; OldRowAccessor,
   NewRowAccessor: TZRowAccessor);
 begin
@@ -1061,14 +1015,14 @@ end;
 
 {BEGIN of PATCH [1185969]: Do tasks after posting updates. ie: Updating AutoInc fields in MySQL }
 procedure TZEmptyResolver.UpdateAutoIncrementFields(
-  Sender: IZCachedResultSet; UpdateType: TZRowUpdateType; OldRowAccessor,
-  NewRowAccessor: TZRowAccessor; Resolver: IZCachedResolver);
+  const Sender: IZCachedResultSet; UpdateType: TZRowUpdateType; OldRowAccessor,
+  NewRowAccessor: TZRowAccessor; const Resolver: IZCachedResolver);
 begin
  //Should be implemented at Specific database Level Cached resolver
 end;
 {END of PATCH [1185969]: Do tasks after posting updates. ie: Updating AutoInc fields in MySQL }
 
-procedure TZEmptyResolver.RefreshCurrentRow(Sender: IZCachedResultSet;RowAccessor: TZRowAccessor);
+procedure TZEmptyResolver.RefreshCurrentRow(const Sender: IZCachedResultSet;RowAccessor: TZRowAccessor);
 begin
  //Should be implemented at Specific database Level Cached resolver
 end;

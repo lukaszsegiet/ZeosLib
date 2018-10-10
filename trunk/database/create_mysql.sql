@@ -45,6 +45,21 @@ create table default_values
 );
 
 /*==============================================================*/
+/* Table : default_values                                          */
+/*==============================================================*/
+create table default_values2
+(
+   d_id                           int not null auto_increment,
+   d_fld1                         float default 123.456,
+   d_fld2                         int default 123456,
+   d_fld3                     	  date default '2003-12-11',
+   d_fld4                     	  varchar(10) default 'xyz',
+   d_fld5                     	  datetime default '2003-12-11 23:12:11',
+   d_fld6                     	  time default '23:12:11',
+   primary key (d_id)
+);
+
+/*==============================================================*/
 /* Table : department                                           */
 /*==============================================================*/
 create table department
@@ -201,7 +216,7 @@ primary key (cs_id)
 /*==============================================================*/
 create table high_load (
 hl_id		      INTEGER NOT NULL,
-stBoolean             ENUM('Y','N'),
+stBoolean             BIT(1),
 stByte                TINYINT UNSIGNED,
 stShort               SMALLINT,
 stInteger             INTEGER,
@@ -464,6 +479,8 @@ BEGIN
 END; //
 
 CREATE FUNCTION FuncReturnInteger(`p_in` INT) RETURNS INTEGER
+    DETERMINISTIC
+	NO SQL
 BEGIN
   DECLARE `Temp` INTEGER;
   set Temp = `p_in` + 10;
@@ -473,7 +490,9 @@ END;//
 CREATE PROCEDURE `MultipleVaryingResultSets`(
   IN p_in INT,
   OUT p_out INT,
-  INOUT p_inout INT)
+  INOUT p_inout INT
+)
+	READS SQL DATA
 BEGIN
   SELECT p_in, p_out, p_inout;
   SET p_in = 100, p_out = 200, p_inout = 300;
@@ -483,26 +502,39 @@ BEGIN
 END;//
 
 CREATE PROCEDURE SingleResultSet()
+	READS SQL DATA
 BEGIN
-  SELECT * FROM PEOPLE;
+  SELECT * FROM people;
 END;//
 
 CREATE PROCEDURE ALL_PARAMS_IN(
   IN p_id INT,
-  IN p_name varchar(40))
+  IN p_name varchar(40)
+)
+	READS SQL DATA
 BEGIN
   SELECT * from people where people.p_id=p_id or people.p_name=p_name; 
 END;//
 
 CREATE FUNCTION SIMPLE_FUNC() RETURNS INTEGER
+	READS SQL DATA
 BEGIN
   RETURN 10;
 END;//
 
 CREATE PROCEDURE TwoResultSets()
+	READS SQL DATA
 BEGIN
-  SELECT * FROM PEOPLE;
+  SELECT * FROM people;
   SELECT * FROM string_values;
+END;//
+
+CREATE PROCEDURE ThreeResultSets()
+	READS SQL DATA
+BEGIN
+  SELECT * FROM people;
+  SELECT * FROM string_values;
+  SELECT * FROM equipment;
 END;//
 
 DELIMITER ;

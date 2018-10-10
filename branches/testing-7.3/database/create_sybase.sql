@@ -78,6 +78,13 @@ go
 
 if exists (select 1
             from  sysobjects
+           where  id = object_id('default_values2')
+            and   type = 'U')
+   drop table default_values2
+go
+
+if exists (select 1
+            from  sysobjects
            where  id = object_id('department')
             and   type = 'U')
    drop table department
@@ -229,6 +236,21 @@ create table default_values(
 go
 
 /*==============================================================*/
+/* Table : default_values2                                       */
+/*==============================================================*/
+create table default_values2(
+   d_id                           int 	      not null,
+   d_fld1                         float       default 123.456,
+   d_fld2                         int 	      default 123456,
+   d_fld3                     	  datetime    default '2003-12-11',
+   d_fld4                     	  varchar(10) default 'xyz',
+   d_fld5                     	  datetime    default '2003-12-11 23:12:11',
+   d_fld6                     	  datetime    default '23:12:11',
+   constraint PK_DEFAULT_VALUES2 primary key (d_id)
+)
+go
+
+/*==============================================================*/
 /* Table : department                                           */
 /*==============================================================*/
 create table department (
@@ -337,8 +359,8 @@ create table string_values (
 s_id                 int                  not null,
 s_char               char(255)            null,
 s_varchar            varchar(255)         null,
-s_nchar              char(255)            null,
-s_nvarchar           varchar(255)         null,
+s_nchar              unichar(255)            null,
+s_nvarchar           unichar(255)         null,
 s_bit                binary(255)          null,
 s_varbit             varbinary(1024)      null,
 primary key  (s_id)
@@ -398,23 +420,23 @@ go
 create table high_load (
 hl_id		      INTEGER NOT NULL,
 stBoolean             BIT,
-stByte                TINYINT,
-stShort               SMALLINT,
-stInteger             INTEGER,
-stLong                BIGINT,
-stFloat               FLOAT,
-stDouble              double precision,
-stBigDecimal          money,
-stString              VARCHAR(100),
-stUnicodeString       NVARCHAR(255),
-stBytes               VARBINARY(100),
-stDate                datetime,
-stTime                datetime,
-stTimestamp           datetime,
-stGUID                varbinary(16) /*UNIQUEIDENTIFIER*/,
-stAsciiStream         text,
-stUnicodeStream       text,
-stBinaryStream        IMAGE,
+stByte                TINYINT null,
+stShort               SMALLINT null,
+stInteger             INTEGER null,
+stLong                BIGINT null,
+stFloat               FLOAT null,
+stDouble              double precision null,
+stBigDecimal          money null,
+stString              VARCHAR(100) null,
+stUnicodeString       NVARCHAR(255) null,
+stBytes               VARBINARY(100) null,
+stDate                datetime null,
+stTime                datetime null,
+stTimestamp           datetime null,
+stGUID                varbinary(16) null /*UNIQUEIDENTIFIER*/,
+stAsciiStream         text null,
+stUnicodeStream       text null,
+stBinaryStream        IMAGE null,
 primary key (hl_id)
 )
 go

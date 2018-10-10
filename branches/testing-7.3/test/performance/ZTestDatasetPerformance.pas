@@ -99,7 +99,7 @@ type
 
 implementation
 
-uses ZSysUtils, ZTestCase;
+uses ZSysUtils, ZTestCase, ZSqlTestCase;
 
 { TZDatasetPerformanceTestCase }
 
@@ -128,11 +128,7 @@ procedure TZDatasetPerformanceTestCase.TearDown;
 begin
   if (not SkipPerformanceTransactionMode) and
     Query.Connection.Connected then Query.Connection.Commit;
-  if Assigned(Query) then
-  begin
-    Query.Free;
-    Query := nil;
-  end;
+  FreeAndNil(FQuery);
   inherited TearDown;
 end;
 
@@ -203,9 +199,9 @@ begin
           ftWideMemo:
             (Fields[i] as TBlobField).LoadFromStream(FUnicodeStream);
           {$ENDIF}
-          ftSmallint:
-            Fields[i].AsInteger := Random(255);
-          ftInteger, ftWord, ftLargeint:
+          ftSmallint, ftWord {$IFDEF WITH_FTBYTE}, ftByte {$ENDIF} {$IFDEF WITH_FTSHORTINT}, ftShortint {$ENDIF}:
+            Fields[i].AsInteger := Random(127);
+          ftInteger, ftLargeint:
             Fields[i].AsInteger := Index;
           ftBoolean:
             Fields[i].AsBoolean := Random(1) = 0;
@@ -279,7 +275,8 @@ begin
           {$IFNDEF FPC}, ftFixedWideChar{$ENDIF}:
             Fields[i].AsWideString;
           {$ENDIF}
-          ftSmallint, ftInteger, ftWord, ftLargeint:
+          ftSmallint, ftWord {$IFDEF WITH_FTBYTE}, ftByte {$ENDIF} {$IFDEF WITH_FTSHORTINT}, ftShortint {$ENDIF},
+          ftInteger, ftLargeint:
             Fields[i].AsInteger;
           ftBoolean:
             Fields[i].AsBoolean;
@@ -337,9 +334,9 @@ begin
           ftWideMemo:
             Fields[i].AsWideString := WideString(RandomStr(RecordCount*100));
           {$ENDIF}
-          ftSmallint:
-            Fields[i].AsInteger := Random(255);
-          ftInteger, ftWord, ftLargeint:
+          ftSmallint, ftWord {$IFDEF WITH_FTBYTE}, ftByte {$ENDIF} {$IFDEF WITH_FTSHORTINT}, ftShortint {$ENDIF}:
+            Fields[i].AsInteger := Random(127);
+          ftInteger, ftLargeint:
             Fields[i].AsInteger := RandomInt(-100, 100);
           ftBoolean:
             Fields[i].AsBoolean := Random(1) = 0;
@@ -410,28 +407,32 @@ begin
     { check types }
     case ConnectionConfig.PerformanceDataSetTypes[i] of
       ftBytes, ftBlob:
-        if StartsWith(Protocol, 'firebird') and not EndsWith(Protocol, '2.5') then //firebird below 2.5 doesn't support x'hex' syntax
-        begin
-          SetLength(FDirectFieldTypes, Length(FDirectFieldTypes)-1); //omit these types to avoid exception
+        // check if driver can do GetBinaryEscapeString (f.i., firebird below 2.5 doesn't support x'hex' syntax)
+        // we do a test run of the method and remove type if it raises exception
+        try
+          Connection.DbcConnection.GetBinaryEscapeString(RandomBts(5));
+        except
+          SetLength(FDirectSQLTypes, Length(FDirectSQLTypes)-1); //omit these types to avoid exception
           SetLength(FDirectFieldNames, Length(FDirectFieldNames)-1); //omit these names to avoid exception
           SetLength(FDirectFieldSizes, Length(FDirectFieldSizes)-1); //omit these names to avoid exception
         end;
       ftBoolean:
-        if StartsWith(Protocol, 'sqlite') or StartsWith(Protocol, 'mysql') then
-        begin
-          Self.FTrueVal := #39'Y'#39;
-          Self.FFalseVal := #39'N'#39;
-        end
-        else
-          if StartsWith(Protocol, 'postgre')then
-          begin
-            Self.FTrueVal := 'TRUE';
-            Self.FFalseVal := 'FALSE';
-          end
+        case ProtocolType of
+          protSQLite, protMySQL:
+            begin
+              Self.FTrueVal := #39'Y'#39;
+              Self.FFalseVal := #39'N'#39;
+            end;
+          protPostgre:
+            begin
+              Self.FTrueVal := 'TRUE';
+              Self.FFalseVal := 'FALSE';
+            end
           else
-          begin
-            Self.FTrueVal := '1';
-            Self.FFalseVal := '0';
+            begin
+              Self.FTrueVal := '1';
+              Self.FFalseVal := '0';
+            end;
         end;
       ftDate, ftTime, ftDateTime, ftTimeStamp: //session dependend values. This i'll solve later
         begin
@@ -469,9 +470,9 @@ begin
             SQL := SQL + FDirectFieldNames[N]+'='+ FTrueVal
           else
             SQL := SQL + FDirectFieldNames[N]+'='+ FFalseVal;
-        ftSmallint:
-          SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(255));
-        ftInteger, ftWord, ftLargeint:
+        ftSmallint, ftWord {$IFDEF WITH_FTBYTE}, ftByte {$ENDIF} {$IFDEF WITH_FTSHORTINT}, ftShortint {$ENDIF}:
+          SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(127));
+        ftInteger, ftLargeint:
           SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(I));
         ftBCD, ftFMTBcd, ftFloat, ftCurrency{$IFDEF WITH_FTEXTENDED}, ftExtended{$ENDIF}:
           {$IFNDEF WITH_FORMATSETTINGS}

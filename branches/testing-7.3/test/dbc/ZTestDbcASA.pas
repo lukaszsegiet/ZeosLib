@@ -182,7 +182,7 @@ begin
   TempStream := nil;
   TextStream := TStringStream.Create('ABCDEFG');
   ImageStream := TMemoryStream.Create;
-  ImageStream.LoadFromFile('../../../database/images/zapotec.bmp');
+  ImageStream.LoadFromFile(TestFilePath('images/zapotec.bmp'));
   try
     PreparedStatement := Connection.PrepareStatement(
       'INSERT INTO BLOB_VALUES (B_ID, B_TEXT, B_IMAGE) VALUES(?,?,?)');
@@ -202,12 +202,11 @@ begin
     TempStream := ResultSet.GetBinaryStreamByName('B_IMAGE');
     CheckEquals(ImageStream, TempStream);
   finally
-    if Assigned(TempStream) then
-      TempStream.Free;
+    FreeAndNil(TempStream);
     ResultSet.Close;
 
-    TextStream.Free;
-    ImageStream.Free;
+    FreeAndNil(TextStream);
+    FreeAndNil(ImageStream);
 
     Statement.Close;
   end;

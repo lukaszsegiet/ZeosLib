@@ -43,7 +43,7 @@ go*/
 drop table case_sensitive
 go
 
-drop table [spaced names]
+drop table [Spaced Names]
 go
 
 drop table high_load
@@ -52,13 +52,16 @@ go
 drop table default_values
 go
 
+drop table default_values2
+go
+
 drop procedure procedure1
 go
 
 drop procedure procedure2
 go
 
-drop procedure abtest
+drop procedure ABTEST
 go
 
 drop SEQUENCE generate_id

@@ -216,11 +216,7 @@ procedure AddMathFunctions(Functions : TZFunctionsList);
 implementation
 
 uses
-  Math;
-
-{$IFDEF FPC}
-  {$HINTS OFF}
-{$ENDIF}
+  Math{$IFDEF BCD_TEST}, FmtBCD{$ENDIF};
 
 { TZEFunction }
 
@@ -234,7 +230,11 @@ function TZEFunction.Execute(Stack: TZExecutionStack;
   const VariantManager: IZVariantManager): TZVariant;
 begin
   CheckParamsCount(Stack, 0);
+  {$IFDEF BCD_TEST}
+  Result := EncodeDouble(Exp(1));
+  {$ELSE}
   VariantManager.SetAsFloat(Result, Exp(1));
+  {$ENDIF}
 end;
 
 { TZPIFunction }
@@ -249,7 +249,11 @@ function TZPIFunction.Execute(Stack: TZExecutionStack;
   const VariantManager: IZVariantManager): TZVariant;
 begin
   CheckParamsCount(Stack, 0);
+  {$IFDEF BCD_TEST}
+  Result := EncodeDouble(PI);
+  {$ELSE}
   VariantManager.SetAsFloat(Result, PI);
+  {$ENDIF}
 end;
 
 { TZRndFunction }
@@ -264,7 +268,11 @@ function TZRndFunction.Execute(Stack: TZExecutionStack;
   const VariantManager: IZVariantManager): TZVariant;
 begin
   CheckParamsCount(Stack, 0);
+  {$IFDEF BCD_TEST}
+  Result := EncodeDouble(Random);
+  {$ELSE}
   VariantManager.SetAsFloat(Result, Random);
+  {$ENDIF}
 end;
 
 { TZAbsFunction }
@@ -283,9 +291,23 @@ begin
   CheckParamsCount(Stack, 1);
   Value := Stack.GetParameter(1);
   if Value.VType = vtInteger then
+  {$IFDEF BCD_TEST}
+    Result := EncodeInteger(Abs(Value.VInteger))
+  else if Value.VType = vtDouble then
+    Result := EncodeDouble(Abs(Value.VDouble))
+  else if Value.VType = vtCurrency then
+    Result := EncodeCurrency(Abs(Value.VCurrency))
+  else if (Value.VType = vtBigDecimal) then begin
+    InitializeVariant(Result, vtBigDecimal);
+    if IsBcdNegative(Value.VBigDecimal)
+    then Result.VBigDecimal := Value.VBigDecimal
+    else BcdMultiply(Value.VBigDecimal, StrToBCD('-1'), Result.VBigDecimal);
+  end
+  {$ELSE}
     VariantManager.SetAsInteger(Result, Abs(Value.VInteger))
   else if Value.VType = vtFloat then
     VariantManager.SetAsFloat(Result, Abs(Value.VFloat))
+  {$ENDIF}
   else
     Result := Value;
 end;
@@ -300,10 +322,12 @@ end;
 }
 function TZExpFunction.Execute(Stack: TZExecutionStack;
   const VariantManager: IZVariantManager): TZVariant;
+var
+  Value: TZVariant;
 begin
   CheckParamsCount(Stack, 1);
   VariantManager.SetAsFloat(Result, Exp(
-    VariantManager.GetAsFloat(Stack.GetParameter(1))));
+    VariantManager.GetAsFloat(Value)));
 end;
 
 { TZLogFunction }

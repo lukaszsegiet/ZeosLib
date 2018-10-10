@@ -109,6 +109,18 @@ create table default_values(
 )
 go
 
+create table default_values2
+(
+   d_id                           int 	      not null,
+   d_fld1                         float       default 123.456,
+   d_fld2                         int 	      default 123456,
+   d_fld3                     	  datetime    default '2003-12-11',
+   d_fld4                     	  varchar(10) default 'xyz',
+   d_fld5                     	  datetime    default '2003-12-11 23:12:11',
+   d_fld6                     	  datetime    default '23:12:11',
+   primary key (d_id)
+);
+go
 
 /*==============================================================*/
 /* Table : equipment                                            */
@@ -268,23 +280,23 @@ go
 create table high_load (
 hl_id		      INTEGER NOT NULL,
 stBoolean             BIT,
-stByte                TINYINT,
-stShort               SMALLINT,
-stInteger             INTEGER,
-stLong                BIGINT,
-stFloat               FLOAT,
-stDouble              double precision,
-stBigDecimal          money,
-stString              VARCHAR(100),
-stUnicodeString       NVARCHAR(255),
-stBytes               VARBINARY(100),
-stDate                datetime,
-stTime                datetime,
-stTimestamp           datetime,
-stGUID                UNIQUEIDENTIFIER,
-stAsciiStream         text,
-stUnicodeStream       text,
-stBinaryStream        IMAGE,
+stByte                TINYINT null,
+stShort               SMALLINT null,
+stInteger             INTEGER null,
+stLong                BIGINT null,
+stFloat               FLOAT null,
+stDouble              double precision null,
+stBigDecimal          money null,
+stString              VARCHAR(100) null,
+stUnicodeString       NVARCHAR(255) null,
+stBytes               VARBINARY(100) null,
+stDate                datetime null,
+stTime                datetime null,
+stTimestamp           datetime null,
+stGUID                UNIQUEIDENTIFIER null,
+stAsciiStream         text null,
+stUnicodeStream       ntext null,
+stBinaryStream        IMAGE null,
 primary key (hl_id)
 )
 go
@@ -308,9 +320,6 @@ as
   select eq_name FROM equipment ORDER BY eq_name
 go
 
-/*==============================================================*/
-/* Stored procedure: abtest                                     */
-/*==============================================================*/
 SET ANSI_NULLS ON 
 go
 
@@ -322,6 +331,9 @@ START WITH 90000250
 INCREMENT BY 1
 go
 
+/*==============================================================*/
+/* Stored procedure: abtest                                     */
+/*==============================================================*/
 CREATE PROCEDURE [ABTEST]
 	@p1 int,
 	@p2 int,

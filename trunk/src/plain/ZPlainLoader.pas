@@ -75,35 +75,35 @@ type
     FHandle: THandle;  //M.A. LongWord;
     FLoaded: Boolean;
     FCurrentLocation: String;
-    function ZLoadLibrary(Location: String): Boolean;
+    function ZLoadLibrary(const Location: String): Boolean;
   protected
     procedure FreeNativeLibrary; virtual;
   public
-    constructor Create(Locations: array of string);
+    constructor Create(const Locations: array of string);
     destructor Destroy; override;
 
     procedure ClearLocations;
-    procedure AddLocation(Location: String);
+    procedure AddLocation(const Location: String);
     function Load: Boolean; virtual;
     function LoadNativeLibrary: Boolean; virtual;
-    function LoadNativeLibraryStrict(Location: String): Boolean;
+    function LoadNativeLibraryStrict(const Location: String): Boolean;
     procedure LoadIfNeeded; virtual;
 
     property Loaded: Boolean read FLoaded write FLoaded;
     property Handle: THandle { M.A. LongWord} read FHandle write FHandle;
     property CurrentLocation: String read FCurrentLocation write FCurrentLocation;
-    function GetAddress(ProcName: PAnsiChar): Pointer;
+    function GetAddress(ProcName: {$IFDEF NEXTGEN}PWideChar{$ELSE}PAnsiChar{$ENDIF}): Pointer;
   end;
 
 implementation
 
 uses SysUtils, 
-{$IFNDEF UNIX} 
-  Windows, 
-{$ELSE} 
-  {$IFNDEF FPC} 
-    libc, 
-  {$ENDIF} 
+{$IFDEF MSWINDOWS}
+  Windows,
+(*{$ELSE}
+  {$IFNDEF FPC}
+    libc,
+  {$ENDIF} *)
 {$ENDIF}
   ZMessages;
 
@@ -113,7 +113,7 @@ uses SysUtils,
   Creates this loader class and assignes main properties.
   @param Locations locations of native library on windows platform.
 }
-constructor TZNativeLibraryLoader.Create(Locations: array of string);
+constructor TZNativeLibraryLoader.Create(const Locations: array of string);
 var
   I: Integer;
 begin
@@ -130,7 +130,7 @@ end;
 }
 destructor TZNativeLibraryLoader.Destroy;
 begin
-  if Loaded then
+  if Loaded then               
     FreeNativeLibrary;
   inherited Destroy;
 end;
@@ -140,7 +140,7 @@ begin
   SetLength(FLocations,0);
 end;
 
-procedure TZNativeLibraryLoader.AddLocation(Location: String);
+procedure TZNativeLibraryLoader.AddLocation(const Location: String);
 var
    i: integer;
 begin
@@ -171,7 +171,7 @@ begin
     Load;
 end;
 
-function TZNativeLibraryLoader.ZLoadLibrary(Location: String): Boolean;
+function TZNativeLibraryLoader.ZLoadLibrary(const Location: String): Boolean;
 var newpath, temp: String; // AB modif
 begin
   if FLoaded then
@@ -182,10 +182,10 @@ begin
   newpath := ExtractFilePath(Location);
   // AB modif BEGIN
   try
-   if newpath <> '' then begin
-     temp := GetCurrentDir;
-     SetCurrentDir(newpath);
-   end;
+    if newpath <> '' then begin
+      temp := GetCurrentDir;
+      SetCurrentDir(newpath);
+    end;
   // AB modif END
 
 {$IFDEF UNIX}
@@ -200,12 +200,11 @@ begin
 
   // AB modif BEGIN
   finally
-   if temp<>'' then
-     SetCurrentDir(temp);
+    if temp<>'' then
+      SetCurrentDir(temp);
   end;
   // AB modif END
-  if (FHandle <> INVALID_HANDLE_VALUE) and (FHandle <> 0) then
-  begin
+  if (FHandle <> INVALID_HANDLE_VALUE) and (FHandle <> 0) then  begin
     FLoaded := True;
     FCurrentLocation := Location;
     Result := True;
@@ -222,25 +221,20 @@ var
 begin
   TriedLocations := '';
   for I := 0 to High(FLocations) do
-    begin
-      if ZLoadLibrary(FLocations[I]) then
-        Break
-      else
-        if TriedLocations <> '' then
-          TriedLocations := TriedLocations + ', ' + FLocations[I]
-        else
-          TriedLocations := FLocations[I];
-    end;
+    if ZLoadLibrary(FLocations[I]) then
+      Break
+    else if TriedLocations <> ''
+      then TriedLocations := TriedLocations + ', ' + FLocations[I]
+      else TriedLocations := FLocations[I];
 
   if not Loaded then
-    if (Length(FLocations) > 0) and FileExists(FLocations[High(FLocations)]) then
-      raise Exception.Create(Format(SLibraryNotCompatible, [TriedLocations]))
-    else
-      raise Exception.Create(Format(SLibraryNotFound, [TriedLocations]));
+    if (Length(FLocations) > 0) and FileExists(FLocations[High(FLocations)])
+    then raise Exception.Create(Format(SLibraryNotCompatible, [TriedLocations]))
+    else raise Exception.Create(Format(SLibraryNotFound, [TriedLocations]));
   Result := True;
 end;
 
-function TZNativeLibraryLoader.LoadNativeLibraryStrict(Location: String): Boolean;
+function TZNativeLibraryLoader.LoadNativeLibraryStrict(const Location: String): Boolean;
 begin
   If not ZLoadLibrary(Location) then
     if FileExists(Location) then
@@ -267,7 +261,7 @@ end;
   @param ProcName a name of the procedure.
   @return a procedure address.
 }
-function TZNativeLibraryLoader.GetAddress(ProcName: PAnsiChar): Pointer;
+function TZNativeLibraryLoader.GetAddress(ProcName: {$IFDEF NEXTGEN}PWideChar{$ELSE}PAnsiChar{$ENDIF}): Pointer;
 begin
   Result := GetProcAddress(Handle, ProcName);
 end;

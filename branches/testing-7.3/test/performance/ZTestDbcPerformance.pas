@@ -110,7 +110,7 @@ type
 
 implementation
 
-uses ZTestCase, ZSysUtils, ZDbcResultSet, ZDbcUtils, ZEncoding;
+uses ZTestCase, ZSysUtils, ZDbcResultSet, ZEncoding;
 
 { TZNativeDbcPerformanceTestCase }
 
@@ -214,9 +214,12 @@ begin
         stBoolean: Statement.SetBoolean(N, Random(1) = 1);
         stByte,
         stShort,
-        stSmall: Statement.SetByte(N, Ord(Random(255)));
+        stSmall,
+        stWord: Statement.SetShort(N, Random(127));
         stInteger,
-        stLong:    Statement.SetInt(N, I);
+        stLongWord,
+        stLong,
+        stULong:    Statement.SetInt(N, I);
         stFloat,
         stDouble,
         stBigDecimal: Statement.SetFloat(N, RandomFloat(-100, 100));
@@ -265,11 +268,14 @@ begin
     for i := FirstDbcIndex to high(ConnectionConfig.PerformanceResultSetTypes){$IFNDEF GENERIC_INDEX}+1{$ENDIF} do
       case ConnectionConfig.PerformanceResultSetTypes[i{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] of
         stBoolean: FResultSet.GetBoolean(I);
-        stByte:    FResultSet.GetByte(I);
+        stByte,
         stShort,
         stSmall,
-        stInteger,
-        stLong:    FResultSet.GetInt(I);
+        stWord,
+        stInteger: FResultSet.GetInt(I);
+        stLong:     FResultSet.GetLong(I);
+        stLongWord,
+        stULong:    FResultSet.GetULong(I);
         stFloat,
         stDouble,
         stBigDecimal: FResultSet.GetFloat(I);
@@ -322,11 +328,14 @@ begin
     for N := FirstDbcIndex to high(ConnectionConfig.PerformanceResultSetTypes) do
       case ConnectionConfig.PerformanceResultSetTypes[N] of
         stBoolean: Statement.SetBoolean(N, Random(1) = 1);
-        stByte:    Statement.SetByte(N, Ord(Random(255)));
+        stByte,
         stShort,
         stSmall,
+        stWord:        Statement.SetShort(N, Random(127));
         stInteger,
-        stLong:    Statement.SetInt(N, I);
+        stLongWord:    Statement.SetInt(N, I);
+        stLong,
+        stULong:       Statement.SetInt(N, I);
         stFloat,
         stDouble,
         stBigDecimal: Statement.SetFloat(N, RandomFloat(-100, 100));
@@ -399,28 +408,32 @@ begin
     { check types }
     case ConnectionConfig.PerformanceResultSetTypes[i] of
       stBytes, stBinaryStream:
-        if StartsWith(Protocol, 'firebird') and not EndsWith(Protocol, '2.5') then //firebird below 2.5 doesn't support x'hex' syntax
-        begin
+        // check if driver can do GetBinaryEscapeString (f.i., firebird below 2.5 doesn't support x'hex' syntax)
+        // we do a test run of the method and remove type if it raises exception
+        try
+          Connection.GetBinaryEscapeString(RandomBts(5));
+        except
           SetLength(FDirectSQLTypes, Length(FDirectSQLTypes)-1); //omit these types to avoid exception
           SetLength(FDirectFieldNames, Length(FDirectFieldNames)-1); //omit these names to avoid exception
           SetLength(FDirectFieldSizes, Length(FDirectFieldSizes)-1); //omit these names to avoid exception
         end;
       stBoolean:
-        if StartsWith(Protocol, 'sqlite') or StartsWith(Protocol, 'mysql') then
-        begin
-          Self.FTrueVal := #39'Y'#39;
-          Self.FFalseVal := #39'N'#39;
-        end
-        else
-          if StartsWith(Protocol, 'postgre')then
-          begin
-            Self.FTrueVal := 'TRUE';
-            Self.FFalseVal := 'FALSE';
-          end
+        case ProtocolType of
+          protSQLite, protMySQL:
+            begin
+              Self.FTrueVal := #39'Y'#39;
+              Self.FFalseVal := #39'N'#39;
+            end;
+          protPostgre:
+            begin
+              Self.FTrueVal := 'TRUE';
+              Self.FFalseVal := 'FALSE';
+            end
           else
-          begin
-            Self.FTrueVal := '1';
-            Self.FFalseVal := '0';
+            begin
+              Self.FTrueVal := '1';
+              Self.FFalseVal := '0';
+            end;
         end;
       stDate, stTime, stTimeStamp: //session dependend values. This i'll solve later
         begin
@@ -461,12 +474,15 @@ begin
             SQL := SQL + FDirectFieldNames[N]+'='+ FTrueVal
           else
             SQL := SQL + FDirectFieldNames[N]+'='+ FFalseVal;
-        stByte:
-          SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(255));
+        stByte,
         stShort,
         stSmall,
+        stWord:
+          SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(127));
         stInteger,
-        stLong:
+        stLongWord,
+        stLong,
+        stULong:
           SQL := SQL + FDirectFieldNames[N]+'='+IntToStr(Random(I));
         stFloat,
         stDouble,
@@ -549,11 +565,14 @@ begin
     for N := FirstDbcIndex to high(ConnectionConfig.PerformanceResultSetTypes){$IFNDEF GENERIC_INDEX}+1{$ENDIF} do
       case ConnectionConfig.PerformanceResultSetTypes[N{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] of
         stBoolean: FResultSet.UpdateBoolean(N, Random(1) = 1);
-        stByte:    FResultSet.UpdateByte(N, Ord(Random(255)));
+        stByte,
         stShort,
         stSmall,
+        stWord:   FResultSet.UpdateShort(N, Ord(Random(127)));
         stInteger,
-        stLong:    FResultSet.UpdateInt(N, I);
+        stLongWord,
+        stLong,
+        stULong:   FResultSet.UpdateInt(N, I);
         stFloat,
         stDouble,
         stBigDecimal: FResultSet.UpdateFloat(N, RandomFloat(-100, 100));
@@ -574,16 +593,11 @@ begin
 end;
 
 procedure TZCachedDbcPerformanceTestCase.SetUpTestUpdate;
-var
-  Bts: TBytes;
 begin
   inherited;
   FAsciiStream := TStringStream.Create(RawByteString(RandomStr(GetRecordCount*100)));
-  FUnicodeStream := WideStringStream(ZWideString(RandomStr(GetRecordCount*100)));
-  FBinaryStream := TMemoryStream.Create;
-  Bts := RandomBts(GetRecordCount*100);
-  TMemoryStream(FBinaryStream).Write(Bts, GetRecordCount*100);
-  FBinaryStream.Position := 0;
+  FUnicodeStream := StreamFromData(ZWideString(RandomStr(GetRecordCount*100)));
+  FBinaryStream := StreamFromData(RandomBts(GetRecordCount*100));
 end;
 
 {**
@@ -602,11 +616,14 @@ begin
     for N := {$IFDEF GENERIC_INDEX}1{$ELSE}2{$ENDIF} to high(ConnectionConfig.PerformanceResultSetTypes){$IFNDEF GENERIC_INDEX}+1{$ENDIF} do
       case ConnectionConfig.PerformanceResultSetTypes[N{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] of
         stBoolean: ResultSet.UpdateBoolean(N, Random(1) = 1);
-        stByte:    ResultSet.UpdateByte(N, Ord(Random(255)));
+        stByte,
         stShort,
         stSmall,
+        stWord:   ResultSet.UpdateShort(N, Ord(Random(127)));
         stInteger,
-        stLong:    ResultSet.UpdateInt(N, ResultSet.GetRow);
+        stLongWord,
+        stLong,
+        stULong:   ResultSet.UpdateInt(N, ResultSet.GetRow);
         stFloat,
         stDouble,
         stBigDecimal: ResultSet.UpdateFloat(N, RandomFloat(-100, 100));

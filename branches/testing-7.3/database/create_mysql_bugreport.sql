@@ -41,6 +41,19 @@ CREATE TABLE table735299
 );
 
 /*==============================================================*/
+/* Tables for Bug#735299                                        */
+/* used if MYSQL_FIELTYPE_BIT_1_ISBOOLEN is set                 */
+/*==============================================================*/
+
+CREATE TABLE table735299_bit
+(
+  id INT NOT NULL,
+  fld1 bit(1),
+  fld2 bit(1),
+  PRIMARY KEY (id)
+);
+
+/*==============================================================*/
 /* Tables for Bug#740899                                        */
 /*==============================================================*/
 
@@ -413,9 +426,22 @@ INSERT INTO TableTicket52(id_test, filter_test) VALUES (6, 'String02');
 /*==============================================================*/
 /* Tables for TableMS56OBER9357                                 */
 /*==============================================================*/
+
+SET sql_mode = ''; -- To make possible assigning of '0000-00-00' value
+
 CREATE TABLE `TableMS56OBER9357` (
 `keyfield` int(11) NOT NULL default '0',
 `dtfield` date NOT NULL default '0000-00-00',
 `infofield` varchar(10) default NULL,
 PRIMARY KEY (`keyfield`,`dtfield`)
 );
+
+/*==============================================================*/
+/* Tables for Ticket#240                                        */
+/*==============================================================*/
+CREATE TABLE TableTicket240 (
+  id_test BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  field_1 varchar(255) DEFAULT NULL,
+  PRIMARY KEY (id_test)
+);
+

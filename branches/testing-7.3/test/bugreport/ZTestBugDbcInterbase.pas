@@ -57,7 +57,7 @@ interface
 
 uses
   Classes, SysUtils, {$IFDEF FPC}testregistry{$ELSE}TestFramework{$ENDIF},
-  ZDbcIntfs, ZCompatibility, ZDbcInterbase6, ZSqlTestCase;
+  ZDbcIntfs, ZCompatibility, ZSqlTestCase;
 
 type
 
@@ -129,23 +129,21 @@ end;
 }
 procedure TZTestDbcInterbaseBugReport.Test841559;
 var
-  Temp: boolean;
   Statement: IZStatement;
 begin
   if SkipForReason(srClosedBug) then Exit;
 
-  Temp := False;
   Statement := Connection.CreateStatement;
   Statement.SetResultSetType(rtScrollInsensitive);
   Statement.SetResultSetConcurrency(rcUpdatable);
 
   Statement.Execute('DELETE FROM TABLE841559');
   try
-   Statement.Execute('INSERT INTO TABLE841559 (FLD1, FLD2) VALUES (1, NULL)');
-  except
-   Temp := True;
+    Statement.Execute('INSERT INTO TABLE841559 (FLD1, FLD2) VALUES (1, NULL)');
+    Fail('Just exception EXCEPTION841559');
+  except on E: Exception do
+    CheckNotTestFailure(E);
   end;
-  CheckEquals(True, Temp, 'Just exception EXCEPTION841559');
 end;
 
 procedure TZTestDbcInterbaseBugReport.Test843655;
@@ -171,9 +169,9 @@ begin
   Statement.SetResultSetType(rtScrollInsensitive);
   Statement.SetResultSetConcurrency(rcUpdatable);
   try
-    BinStream.LoadFromFile('../../../database/images/dogs.jpg');
+    BinStream.LoadFromFile(TestFilePath('images/dogs.jpg'));
     BinStream.Size := 512;
-    StrStream.LoadFromFile('../../../database/text/lgpl.txt');
+    StrStream.LoadFromFile(TestFilePath('text/lgpl.txt'));
     StrStream.Size := 512;
 
     Statement.Execute('DELETE FROM BLOB_VALUES');
@@ -202,9 +200,9 @@ begin
 
     BinStream1.Free;
     StrStream1.Free;
-    BinStream.LoadFromFile('../../../database/images/dogs.jpg');
+    BinStream.LoadFromFile(TestFilePath('images/dogs.jpg'));
     BinStream.Size := 1024;
-    StrStream.LoadFromFile('../../../database/text/lgpl.txt');
+    StrStream.LoadFromFile(TestFilePath('text/lgpl.txt'));
     StrStream.Size := 1024;
 
     ResultSet := Statement.ExecuteQuery('SELECT * FROM BLOB_VALUES');
@@ -229,12 +227,10 @@ begin
     CheckEquals(StrStream, StrStream1, '1024 bytes string stream');
     Statement.Close;
   finally
-    BinStream.Free;
-    StrStream.Free;
-    if Assigned(BinStream1) then
-      BinStream1.Free;
-    if Assigned(StrStream1) then
-      StrStream1.Free;
+    FreeAndNil(BinStream);
+    FreeAndNil(StrStream);
+    FreeAndNil(BinStream1);
+    FreeAndNil(StrStream1);
   end;
 end;
 

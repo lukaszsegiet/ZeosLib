@@ -57,7 +57,7 @@ interface
 
 uses
   Classes, {$IFDEF FPC}testregistry{$ELSE}TestFramework{$ENDIF},
-  ZDataset, ZDbcIntfs, ZSqlTestCase, ZCompatibility;
+  ZDataset, ZDbcIntfs, ZSqlTestCase, ZCompatibility, ZDbcProperties;
 
 type
 
@@ -121,6 +121,7 @@ begin
     Query.ExecSQL;
     Query.SQL.Text := 'select n_id, s_nchar, s_nvarchar, s_char, s_varchar from national_char_values';
     Query.Open;
+    CheckEquals(5, Query.FieldCount, 'The SQL >' + Query.SQL.Text + '< returned less fields than were expected.');
     {$IFNDEF UNICODE}
     if Connection.ControlsCodePage = cCP_UTF8 then
     begin
@@ -158,7 +159,7 @@ begin
       CheckEquals(Str5, Query.FieldByName('s_varchar').{$IFDEF WITH_FTWIDESTRING}AsWideString{$ELSE}AsString{$ENDIF}, 's_varchar value');
     end;
   finally
-    Query.Properties.Values['ValidateUpdateCount'] := '-1';
+    Query.Properties.Values[DSProps_ValidateUpdateCount] := '-1';
     Query.SQL.Text := 'delete from national_char_values';
     Query.ExecSQL;
     Query.Free;

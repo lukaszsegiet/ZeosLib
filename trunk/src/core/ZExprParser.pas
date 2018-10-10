@@ -55,7 +55,8 @@ interface
 
 {$I ZCore.inc}
 
-uses SysUtils, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} Contnrs,
+uses SysUtils, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF}
+  {$IFDEF NO_UNIT_CONTNRS}ZClasses{$ELSE}Contnrs{$ENDIF},
   ZCompatibility, ZVariant, ZTokenizer;
 
 type
@@ -98,7 +99,7 @@ type
     function GetNextToken: TZExpressionToken;
     procedure ShiftToken;
     function CheckTokenTypes(
-      TokenTypes: array of TZExpressionTokenType): Boolean;
+      const TokenTypes: array of TZExpressionTokenType): Boolean;
 
     procedure TokenizeExpression;
 
@@ -110,10 +111,10 @@ type
     procedure SyntaxAnalyse5;
     procedure SyntaxAnalyse6;
   public
-    constructor Create(Tokenizer: IZTokenizer);
+    constructor Create(const Tokenizer: IZTokenizer);
     destructor Destroy; override;
 
-    procedure Parse(Expression: string);
+    procedure Parse(const Expression: string);
     procedure Clear;
 
     property Tokenizer: IZTokenizer read FTokenizer write FTokenizer;
@@ -162,7 +163,7 @@ const
   Creates this expression parser object.
   @param Tokenizer an expression tokenizer.
 }
-constructor TZExpressionParser.Create(Tokenizer: IZTokenizer);
+constructor TZExpressionParser.Create(const Tokenizer: IZTokenizer);
 begin
   FTokenizer := Tokenizer;
   FExpression := '';
@@ -200,7 +201,7 @@ end;
   Sets a new expression string and parses it into internal byte code.
   @param expression a new expression string.
 }
-procedure TZExpressionParser.Parse(Expression: string);
+procedure TZExpressionParser.Parse(const Expression: string);
 begin
   Clear;
   FExpression := Trim(Expression);
@@ -266,20 +267,17 @@ end;
   @return <code>True</code> if token types match.
 }
 function TZExpressionParser.CheckTokenTypes(
-  TokenTypes: array of TZExpressionTokenType): Boolean;
+  const TokenTypes: array of TZExpressionTokenType): Boolean;
 var
   I: Integer;
   Temp: TZExpressionToken;
 begin
   Result := False;
-  for I := Low(TokenTypes) to High(TokenTypes) do
-  begin
-    if (FTokenIndex + I) < FInitialTokens.Count then
-    begin
+  for I := Low(TokenTypes) to High(TokenTypes) do begin
+    if (FTokenIndex + I) < FInitialTokens.Count then begin
       Temp := TZExpressionToken(FInitialTokens[FTokenIndex + I]);
       Result := Temp.TokenType = TokenTypes[I];
-      end
-      else
+    end else
       Result := False;
 
     if not Result then
@@ -297,12 +295,12 @@ var
   I: Integer;
   TokenIndex: Integer;
   Temp: string;
-  Tokens: TStrings;
+  Tokens: TZTokenList;
   TokenType: TZExpressionTokenType;
   TokenValue: TZVariant;
 begin
   Tokens := FTokenizer.TokenizeBufferToList(FExpression,
-    [toSkipWhitespaces, toSkipComments, toSkipEOF, toDecodeStrings]);
+    [toSkipWhitespaces, toSkipComments, toSkipEOF]);
   try
     TokenIndex := 0;
 
@@ -310,37 +308,26 @@ begin
     begin
       TokenType := ttUnknown;
       TokenValue := NullVariant;
-      case TZTokenType({$IFDEF FPC}Pointer({$ENDIF}
-        Tokens.Objects[TokenIndex]{$IFDEF FPC}){$ENDIF}) of
+      case Tokens[TokenIndex]^.TokenType of
         ttKeyword:
           begin
-            Temp := UpperCase(Tokens[TokenIndex]);
-            if Temp = 'TRUE' then
-            begin
+            if Tokens.IsEqual(TokenIndex, 'TRUE', tcInsensitive) then begin
               TokenType := ttConstant;
               TokenValue:= EncodeBoolean(True);
-            end
-            else if Temp = 'FALSE' then
-            begin
+            end else if Tokens.IsEqual(TokenIndex, 'FALSE', tcInsensitive) then begin
               TokenType := ttConstant;
               TokenValue:= EncodeBoolean(False);
-            end
-            else
-            begin
+            end else
               for I := Low(OperatorTokens) to High(OperatorTokens) do
-              begin
-                if OperatorTokens[I] = Temp then
-                begin
+                if Tokens.IsEqual(TokenIndex, OperatorTokens[I], tcInsensitive) then begin
                   TokenType := OperatorCodes[I];
                   Break;
                 end;
-              end;
-            end;
           end;
         ttWord:
           begin
             TokenType := ttVariable;
-            Temp := Tokens[TokenIndex];
+            Temp := Tokenizer.GetQuoteState.DecodeToken(Tokens[TokenIndex]^, Tokens[TokenIndex]^.P^);
             if FVariables.IndexOf(Temp) < 0 then
               FVariables.Add(Temp);
             TokenValue:= EncodeString(Temp);
@@ -348,34 +335,30 @@ begin
         ttInteger:
           begin
             TokenType := ttConstant;
-            TokenValue:= EncodeInteger(StrToInt64(Tokens[TokenIndex]));
+            TokenValue:= EncodeInteger(Tokens.AsInt64(TokenIndex));
           end;
         ttFloat:
           begin
             TokenType := ttConstant;
-            TokenValue:= EncodeFloat(SQLStrToFloat(Tokens[TokenIndex]));
+            TokenValue:= EncodeFloat(Tokens.AsFloat(TokenIndex));
           end;
         ttQuoted:
           begin
             TokenType := ttConstant;
-            TokenValue:= EncodeString(Tokens[TokenIndex]);
+            TokenValue:= EncodeString(Tokenizer.GetQuoteState.DecodeToken(Tokens[TokenIndex]^, Tokens[TokenIndex]^.P^));
           end;
         ttSymbol:
-          begin
-            Temp := Tokens[TokenIndex];
             for I := Low(OperatorTokens) to High(OperatorTokens) do
-            begin
-              if Temp = OperatorTokens[I] then
-              begin
+              if Tokens.IsEqual(TokenIndex, OperatorTokens[I], tcInsensitive) then begin
                 TokenType := OperatorCodes[I];
                 Break;
               end;
-            end;
-          end;
         ttTime,ttDate,ttDateTime:
           begin
             TokenType := ttConstant;
-            TokenValue:= EncodeDateTime(StrToDateTime(Tokens[TokenIndex]));
+            Temp := Tokenizer.GetQuoteState.DecodeToken(Tokens[TokenIndex]^, Tokens[TokenIndex]^.P^);
+            TokenValue:= EncodeDateTime(StrToDateTime(Temp));
+            TokenValue.VString := Temp; //this conversion is not 100%safe so'll keep the native value by using advantages of the ZVariant
           end;
       end;
 

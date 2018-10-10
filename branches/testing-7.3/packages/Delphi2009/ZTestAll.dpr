@@ -66,19 +66,23 @@ uses
   ZTestDbc in '..\..\test\dbc\ZTestDbc.pas',
   ZTestComponents in '..\..\test\component\ZTestComponents.pas',
   ZTestBugreports in '..\..\test\bugreport\ZTestBugreports.pas',
-  ZTestPerformance in '..\..\test\performance\ZTestPerformance.pas';
+  ZTestPerformance in '..\..\test\performance\ZTestPerformance.pas',
+  XMLTestRunner2 in '..\..\test\external\XMLTestRunner2.pas';
 
 begin
   TestGroup := COMMON_GROUP;
   ReportMemoryLeaksOnShutDown := CommandLineSwitches.memcheck;
-  If Not CommandLineSwitches.norebuild then
-    RebuildTestDatabases;
 
   If CommandLineSwitches.sqlmonitor then
     EnableZSQLMonitor;
 
+  If Not CommandLineSwitches.norebuild then
+    RebuildTestDatabases;
+
   If CommandLineSwitches.batch then
     TextTestRunner.RunTest(CreateTestSuite).Free
+  else if CommandLineSwitches.xml then
+    XMLTestRunner2.RunTest(CreateTestSuite, CommandLineSwitches.xmlfilename).Free
   else
     GUITestRunner.RunTest(CreateTestSuite);
 end.

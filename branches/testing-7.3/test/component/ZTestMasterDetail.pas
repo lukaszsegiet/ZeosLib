@@ -310,10 +310,11 @@ begin
   inherited TearDown;
 end;
 
-procedure TZTestMasterDetailCaseMBCs.TestClientDatasetWithForeignKey_ApplyUpdates;
 const
-  Str1: ZWideString = 'צהüüהצ';
-  Str2: ZWideString = 'A adress of צהüüהצ';
+  Str1: ZWideString = #$0422#$0435#$0441#$0442; // "Test" in Cyrillic letters
+  Str2: ZWideString = 'An address of ' + #$0422#$0435#$0441#$0442; // the same
+
+procedure TZTestMasterDetailCaseMBCs.TestClientDatasetWithForeignKey_ApplyUpdates;
 var
   SQLMonitor: TZSQLMonitor;
   procedure SetTheData(Index: Integer);
@@ -358,17 +359,20 @@ begin
       DetailQuery.ApplyUpdates;
       MasterQuery.ApplyUpdates;
       Connection.Commit;
-      Fail('Wrong ApplayUpdates behavior!');
-    except
-      DetailQuery.CancelUpdates;
-      MasterQuery.CancelUpdates;
-      SetTheData(1);
-      //DetailQuery.Options := DetailQuery.Options + [doUpdateMasterFirst];
-      MasterQuery.ApplyUpdates;
-      DetailQuery.ApplyUpdates;
-      Connection.Commit;
-      CheckEquals(True, (MasterQuery.State = dsBrowse), 'MasterQuery Browse-State');
-      CheckEquals(True, (DetailQuery.State = dsBrowse), 'DetailQuery Browse-State');
+      Fail('Wrong ApplyUpdates behavior!');
+    except on E: Exception do
+      begin
+        CheckNotTestFailure(E);
+        DetailQuery.CancelUpdates;
+        MasterQuery.CancelUpdates;
+        SetTheData(1);
+        //DetailQuery.Options := DetailQuery.Options + [doUpdateMasterFirst];
+        MasterQuery.ApplyUpdates;
+        DetailQuery.ApplyUpdates;
+        Connection.Commit;
+        CheckEquals(True, (MasterQuery.State = dsBrowse), 'MasterQuery Browse-State');
+        CheckEquals(True, (DetailQuery.State = dsBrowse), 'DetailQuery Browse-State');
+      end;
     end;
   finally
     MasterQuery.SQL.Text := 'delete from people where p_id = '+IntToStr(TestRowID);
@@ -400,7 +404,7 @@ begin
   CheckStringFieldType(MasterQuery.FieldByName('dep_name').DataType, Connection.DbcConnection.GetConSettings);
   CheckStringFieldType(MasterQuery.FieldByName('dep_shname').DataType, Connection.DbcConnection.GetConSettings);
     //ASA curiousity: if NCHAR and VARCHAR fields set to UTF8-CodePage we get the LONG_Char types as fieldTypes for !some! fields
-  if StartsWith(Protocol, 'ASA') and ( Connection.DbcConnection.GetConSettings.ClientCodePage^.CP = 65001 ) then
+  if (ProtocolType = protASA) and (Connection.DbcConnection.GetConSettings.ClientCodePage^.CP = 65001) then
     CheckMemoFieldType(MasterQuery.FieldByName('dep_address').DataType, Connection.DbcConnection.GetConSettings)
   else
     CheckStringFieldType(MasterQuery.FieldByName('dep_address').DataType, Connection.DbcConnection.GetConSettings);
@@ -415,9 +419,9 @@ begin
   try
     MasterQuery.Append;
     MasterQuery.FieldByName('dep_id').AsInteger := TestRowID;
-    MasterQuery.FieldByName('dep_name').AsString := GetDBTestString(ZWideString('צהüüהצ'), Connection.DbcConnection.GetConSettings);
+    MasterQuery.FieldByName('dep_name').AsString := GetDBTestString(Str1, Connection.DbcConnection.GetConSettings);
     MasterQuery.FieldByName('dep_shname').AsString := 'abc';
-    MasterQuery.FieldByName('dep_address').AsString := GetDBTestString(ZWideString('A adress of צהüüהצ'), Connection.DbcConnection.GetConSettings);
+    MasterQuery.FieldByName('dep_address').AsString := GetDBTestString(Str2, Connection.DbcConnection.GetConSettings);
 
     CheckEquals(True, (MasterQuery.State = dsInsert), 'MasterQuery Insert-State');
 

@@ -207,6 +207,17 @@ create table default_values
    primary key (d_id)
 );
 
+create table default_values2
+(
+   d_id                           INTEGER NOT NULL,
+   d_fld1                         FLOAT DEFAULT 123.456,
+   d_fld2                         INTEGER DEFAULT 123456,
+   d_fld3                     	  DATE default '2003-12-11',
+   d_fld4                     	  VARCHAR(10) DEFAULT 'xyz',
+   d_fld5                     	  TIMESTAMP default '2003-12-11 23:12:11',
+   d_fld6                     	  TIME default '23:12:11',
+   primary key (d_id)
+);
 
 /*==============================================================*/
 /* Table : domain_values                                        */
@@ -238,7 +249,55 @@ alter table equipment2
 alter table people
    add foreign key (p_dep_id) references department (dep_id);
 
+/*==============================================================*/
+/* Table : Guids                                                */
+/*==============================================================*/
+
+CREATE DOMAIN DOM_GUID CHAR(16) CHARACTER SET OCTETS;
+
+CREATE TABLE Guids (
+    ID               INTEGER NOT NULL,
+    GUID_DOM_FIELD   DOM_GUID,
+    GUID_TYPE_FIELD  CHAR(16) CHARACTER SET OCTETS
+);
+
+/*==============================================================*/
+/* Table : insert_returning                                     */
+/*==============================================================*/
+
+create table insert_returning
+(
+   id                INTEGER not null,
+   fld               VARCHAR(10),
+   primary key (id)
+);
+
+/*==============================================================*/
+/* Generator : GEN_ID                                           */
+/*==============================================================*/
+
+CREATE GENERATOR GEN_ID;
+
+/*==============================================================*/
+/* Start PSQL section                                           */
+/*==============================================================*/
+
 SET TERM ^ ;
+
+/*==============================================================*/
+/* Trigger : insert_returning_bi                                */
+/*==============================================================*/
+
+create trigger insert_returning_bi FOR insert_returning
+ACTIVE BEFORE INSERT POSITION 0
+AS
+BEGIN
+  IF (NEW.ID IS NULL OR NEW.ID = 0) THEN
+    select Coalesce(Max(ID), 0)+1 from insert_returning
+      into NEW.ID;
+  NEW.FLD = 'ID' || NEW.ID;
+END
+^
 
 /*==============================================================*/
 /* Stored procedure: procedure1                                 */
@@ -253,7 +312,6 @@ SUSPEND;
 END
 ^
 
-
 /*==============================================================*/
 /* Stored procedure: procedure2                                 */
 /*==============================================================*/
@@ -267,7 +325,6 @@ BEGIN
   SUSPEND;
 END
 ^
-
 
 /*==============================================================*/
 /* Stored procedure: ABTEST                                     */
@@ -287,6 +344,24 @@ begin
   suspend;
 end
 ^ 
+
+/*==============================================================*/
+/* Stored procedure: GUIDTEST                                   */
+/*==============================================================*/
+CREATE OR ALTER PROCEDURE GUIDTEST (
+    G_IN DOM_GUID)
+RETURNS (
+    G_OUT DOM_GUID)
+AS
+begin
+  G_OUT = :G_IN;
+  suspend;
+end
+^
+
+/*==============================================================*/
+/* Finish PSQL section                                          */
+/*==============================================================*/
 
 SET TERM ; ^
 

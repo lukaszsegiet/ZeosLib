@@ -5,8 +5,8 @@ unit ZTestDbc;
 interface
 
 uses
-  ZTestDbcResultSet, ZTestDbcUtils, ZTestDbcCache,
-  ZTestDbcCachedResultSet, ZTestDbcMetadata,ZTestDbcResultSetMetadata, ZTestDbcResolver,
+  ZTestDbcDriver, ZTestDbcResultSet, ZTestDbcUtils, ZTestDbcCache,
+  ZTestDbcCachedResultSet, ZTestDbcMetadata, ZTestDbcResultSetMetadata, ZTestDbcResolver,
   {$IFDEF ENABLE_ADO}
   ZTestDbcADO,
   {$ENDIF}
@@ -30,6 +30,9 @@ uses
   {$ENDIF}
   {$IFDEF ENABLE_ASA}
   ZTestDbcASA, ZTestDbcASAMetadata,
+  {$ENDIF}
+  {$IFDEF ENABLE_ODBC}
+  ZTestDbcODBc,
   {$ENDIF}
   ZTestDbcGeneric
   ;

@@ -58,6 +58,7 @@ interface
 {$I ZCore.inc}
 
 uses
+  Classes,
   {$IFDEF FPC}testregistry{$ELSE}TestFramework{$ENDIF},
   ZTestCase, ZURL;
 
@@ -87,11 +88,12 @@ type
     procedure TestAssignToUrl_NoDatabase;
     procedure TestSFTicket8_HostPort_NoDB_Properties;
     procedure TestSFTicket158_LibLocWithSemicolon;
+    procedure TestAssignWithOverwrite;
   end;
 
 implementation
 
-uses ZCompatibility;
+uses ZCompatibility, ZConnProperties;
 
 procedure TZURLTest.TestAssignToUrl;
 var
@@ -111,8 +113,7 @@ begin
     CheckEquals('masterkey', ZURL.Password);
     CheckEquals('rolename=public'+LineEnding, ZURL.Properties.Text);
   finally
-    if Assigned(ZURL) then
-      ZURL.Free;
+    ZURL.Free;
   end;
 end;
 
@@ -134,8 +135,7 @@ begin
     ZURL.Properties.Text := 'rolename=public'+LineEnding;
     CheckEquals('zdbc:oracle://127.0.0.1:3050/model?username=root;password=passwd;rolename=public', ZURL.URL);
   finally
-    if Assigned(ZURL) then
-      ZURL.Free;
+    ZURL.Free;
   end;
 end;
 
@@ -157,8 +157,7 @@ begin
     CheckEquals('pw', ZURL.Password);
     CheckEquals('rolename=public'+LineEnding, ZURL.Properties.Text);
   finally
-    if Assigned(ZURL) then
-      ZURL.Free;
+    ZURL.Free;
   end;
 end;
 
@@ -251,8 +250,8 @@ begin
     ZURL.HostName := '127.0.0.1';
     ZURL.Port := 3050;
     ZURL.Database := 'model';
-    ZURL.Properties.Values['username'] := 'admin';
-    ZURL.Properties.Values['password'] := 'admin';
+    ZURL.Properties.Values[ConnProps_Username] := 'admin';
+    ZURL.Properties.Values[ConnProps_Password] := 'admin';
     ZURL.Properties.Values['prop1'] := 'prop1';
     ZURL.Properties.Values['prop2'] := 'prop2';
     CheckEquals('zdbc:mysql://127.0.0.1:3050/model?username=admin;password=admin;prop1=prop1;prop2=prop2', ZURL.URL);
@@ -273,8 +272,8 @@ begin
     ZURL.Protocol := 'ado';
     ZURL.HostName := 'localhost';
     ZURL.Database := 'database';
-    ZURL.Properties.Values['UID'] := 'admin';
-    ZURL.Properties.Values['PWD'] := '123';
+    ZURL.Properties.Values[ConnProps_UID] := 'admin';
+    ZURL.Properties.Values[ConnProps_PWD] := '123';
     ZURL.Properties.Values['role'] := 'rolename';
     CheckEquals('admin', ZURL.UserName);
     CheckEquals('123', ZURL.Password);
@@ -390,7 +389,7 @@ begin
     ZURLIn.Port := 3050;
     ZURLIn.Database := 'data/;\base';
     ZURLIn.Password := 'pass/;\word';
-    ZURLIn.Properties.Values['UID'] := 'ad/;\min';
+    ZURLIn.Properties.Values[ConnProps_UID] := 'ad/;\min';
     ZURLIn.Properties.Values['role'] := 'role/;\name';
     CheckEquals('data/;\base', ZURLIn.Database);
     CheckEquals('ad/;\min', ZURLIn.UserName);
@@ -407,11 +406,10 @@ begin
     CheckEquals('ad/;\min', ZURLOut.UserName);
     CheckEquals('pass/;\word', ZURLOut.Password);
     CheckEquals('role=role/;\name'+LineEnding, ZURLOut.Properties.Text);
+    CheckEquals('role/;\name', ZURLOut.Properties.Values['role']);
   finally
-    if Assigned(ZURLIn) then
-      ZURLIn.Free;
-    if Assigned(ZURLOut) then
-      ZURLOut.Free;
+    ZURLIn.Free;
+    ZURLOut.Free;
   end;
 end;
 
@@ -576,6 +574,55 @@ begin
     CheckEquals('c:\fbclient.dll', ZURL.LibLocation);
   finally
     ZURL.Free;
+  end;
+end;
+
+{ Test if assign overwrites previous values }
+procedure TZURLTest.TestAssignWithOverwrite;
+var
+  ZURL: TZURL;
+  Params: TStringList;
+begin
+  ZURL := nil;
+  try
+    ZURL := TZURL.Create;
+    ZURL.URL := 'zdbc:firebird-2.0://localhost:3306/database';
+    ZURL.UserName := 'user';
+    ZURL.Password := 'pass';
+    ZURL.LibLocation := 'c:\fbclient.dll';
+    ZURL.URL := 'zdbc:firebird-2.0://localhost:3306/database';
+    // user/pass must be cleared
+    CheckEquals('', ZURL.UserName);
+    CheckEquals('', ZURL.Password);
+    // lib loc must not be cleared
+    CheckEquals('c:\fbclient.dll', ZURL.LibLocation);
+
+    ZURL.UserName := 'user';
+    ZURL.Password := 'pass';
+    ZURL.URL := 'zdbc:firebird-2.0://localhost:3306/database?UID=;PWD=';
+    // user/pass must be cleared (empty values in props)
+    CheckEquals('', ZURL.UserName);
+    CheckEquals('', ZURL.Password);
+
+    ZURL.URL := 'zdbc:firebird-2.0://localhost:3306/database?UID=user;PWD=pass;username=;password=;';
+    // user/pass must have values ignoring empty values in props
+    CheckEquals('user', ZURL.UserName);
+    CheckEquals('pass', ZURL.Password);
+  finally
+    ZURL.Free;
+  end;
+
+  ZURL := nil;
+  Params := TStringList.Create;
+  try
+    Params.Add('SomeValuelessParam');
+    Params.Add('SomeEmptyParam=');
+    ZURL := TZURL.Create('zdbc:firebird-2.0://localhost:3306/database?SomeValuelessParam', Params);
+    // test adding duplicated parameters
+    CheckEquals('zdbc:firebird-2.0://localhost:3306/database?SomeValuelessParam;SomeEmptyParam=', ZURL.URL);
+  finally
+    ZURL.Free;
+    Params.Free;
   end;
 end;
 
