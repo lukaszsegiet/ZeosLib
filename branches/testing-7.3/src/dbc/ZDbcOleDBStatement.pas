@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_OLEDB} //if set we have an empty unit
 {$IFDEF WIN64}
 {$ALIGN 8}
 {$ELSE}
@@ -107,7 +108,7 @@ type
     constructor Create(const Connection: IZConnection; const Info: TStrings); overload;
     destructor Destroy; override;
 
-    procedure Close; override;
+    procedure AfterClose; override;
 
     procedure Prepare; override;
     procedure Unprepare; override;
@@ -130,7 +131,9 @@ type
   end;
   TZOleDBStatement = class(TZOleDBPreparedStatement);
 
+{$ENDIF ZEOS_DISABLE_OLEDB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_OLEDB} //if set we have an empty unit
 
 uses
   Variants, Math,
@@ -189,9 +192,8 @@ begin
   Result := FZBufferSize;
 end;
 
-procedure TZOleDBPreparedStatement.Close;
+procedure TZOleDBPreparedStatement.AfterClose;
 begin
-  inherited Close;
   FCommand := nil;
 end;
 
@@ -579,4 +581,5 @@ begin
   fMoreResultsIndicator := Value;
 end;
 
+{$ENDIF ZEOS_DISABLE_OLEDB} //if set we have an empty unit
 end.

@@ -80,6 +80,9 @@ type
     FColumnsInfo: TObjectList;
     FMetadata: TContainedObject;
     FStatement: IZStatement;
+    FWeakIntfPtrOfSelf: Pointer; //EH: Remainder for dereferencing on stmt
+    //note: while in destruction IZResultSet(Self) has no longer the same pointer address!
+    //so we mark the address in constructor
   protected
     FRawTemp: RawByteString;
     FUniTemp: ZWideString;
@@ -118,7 +121,9 @@ type
     procedure SetConcurrency(Value: TZResultSetConcurrency);
 
     function Next: Boolean; virtual;
+    procedure BeforeClose; virtual;
     procedure Close; virtual;
+    procedure AfterClose; virtual;
     procedure ResetCursor; virtual;
     function WasNull: Boolean; virtual;
 
@@ -685,6 +690,7 @@ constructor TZAbstractResultSet.Create(const Statement: IZStatement; const SQL: 
   Metadata: TContainedObject; ConSettings: PZConSettings);
 var
   DatabaseMetadata: IZDatabaseMetadata;
+  RS: IZResultSet;
 begin
   Self.ConSettings := ConSettings;
   LastWasNull := True;
@@ -692,16 +698,17 @@ begin
   FLastRowNo := 0;
   FClosed := True;
 
-  if Statement = nil then
-  begin
+  { the constructor keeps the refcount to 1}
+  QueryInterface(IZResultSet, RS);
+  FWeakIntfPtrOfSelf := Pointer(RS); //Remainder for unregister on stmt!
+  RS := nil;
+  if Statement = nil then begin
     FResultSetType := rtForwardOnly;
     FResultSetConcurrency := rcReadOnly;
     FPostUpdates := poColumnsAll;
     FLocateUpdates := loWhereAll;
     FMaxRows := 0;
-  end
-  else
-  begin
+  end else begin
     FFetchDirection := Statement.GetFetchDirection;
     FFetchSize := Statement.GetFetchSize;
     FResultSetType := Statement.GetResultSetType;
@@ -712,15 +719,12 @@ begin
     FMaxRows := Statement.GetMaxRows;
   end;
 
-  if Metadata = nil then
-  begin
-    if Statement <> nil then
-      DatabaseMetadata := GetStatement.GetConnection.GetMetadata
-    else
-      DatabaseMetadata := nil;
+  if Metadata = nil then begin
+    if Statement <> nil
+    then DatabaseMetadata := GetStatement.GetConnection.GetMetadata
+    else DatabaseMetadata := nil;
     FMetadata := TZAbstractResultSetMetadata.Create(DatabaseMetadata, SQL, Self);
-   end
-   else
+   end else
     FMetadata := Metadata;
 
   FColumnsInfo := TObjectList.Create(True); //Free the MemoryLeaks of TZColumnInfo
@@ -734,7 +738,6 @@ begin
   if not FClosed then
       Close;
   FreeAndNil(FMetadata);
-  FStatement := nil;
   FreeAndNil(FColumnsInfo);
   inherited Destroy;
 end;
@@ -867,11 +870,13 @@ end;
 }
 procedure TZAbstractResultSet.ResetCursor;
 begin
-  if not FClosed and Assigned(Statement){virtual RS ! } then begin
+  if not FClosed then begin
+    if Assigned(Statement){virtual RS ! }  then begin
     FFetchSize := Statement.GetFetchSize;
     FPostUpdates := Statement.GetPostUpdates;
     FLocateUpdates := Statement.GetLocateUpdates;
     FMaxRows := Statement.GetMaxRows;
+    end;
     FRowNo := 0;
     FLastRowNo := 0;
     LastWasNull := True;
@@ -892,16 +897,26 @@ end;
   is also automatically closed when it is garbage collected.
 }
 procedure TZAbstractResultSet.Close;
+var RefCountAdded: Boolean;
 begin
   if not Closed then begin
-    ResetCursor;
+    BeforeClose;
     FClosed := True;
-    if FColumnsInfo <> nil then
-      FColumnsInfo.Clear;
+    RefCountAdded := False;
     if (FStatement <> nil) then begin
-      FStatement.FreeOpenResultSetReference(Self);
+      if (RefCount = 1) then begin
+        _AddRef;
+        RefCountAdded := True;
+      end;
+      FStatement.FreeOpenResultSetReference(IZResultSet(FWeakIntfPtrOfSelf));
       FStatement := nil;
     end;
+    AfterClose;
+    if RefCountAdded then begin
+      if (RefCount = 1) then
+        DriverManager.AddGarbage(Self);
+       _Release;
+  end;
   end;
 end;
 
@@ -1246,7 +1261,7 @@ begin
 {$IFNDEF DISABLE_CHECKING}
   CheckColumnConvertion(ColumnIndex, stLongWord);
 {$ENDIF}
-  Result := LongWord(GetLong(ColumnIndex));
+  Result := Cardinal(GetLong(ColumnIndex));
 end;
 
 {**
@@ -1581,7 +1596,6 @@ begin
 {$IFNDEF DISABLE_CHECKING}
   CheckBlobColumn(ColumnIndex);
 {$ENDIF}
-
   Result := TZAbstractBlob.CreateWithStream(nil);
 end;
 
@@ -2385,6 +2399,11 @@ end;
   this <code>ResultSet</code> object, just before the
   first row. This method has no effect if the result set contains no rows.
 }
+procedure TZAbstractResultSet.BeforeClose;
+begin
+  ResetCursor;
+end;
+
 procedure TZAbstractResultSet.BeforeFirst;
 begin
   MoveAbsolute(0);
@@ -2395,6 +2414,11 @@ end;
   this <code>ResultSet</code> object, just after the
   last row. This method has no effect if the result set contains no rows.
 }
+procedure TZAbstractResultSet.AfterClose;
+begin
+  FColumnsInfo.Clear;
+end;
+
 procedure TZAbstractResultSet.AfterLast;
 begin
   Last;
@@ -3962,7 +3986,7 @@ begin
             Result[i] := CompareInt64_Asc;
           stByte, stWord, stLongWord, stULong:
             Result[i] := CompareUInt64_Asc;
-          stFloat, stDouble, stBigDecimal:
+          stFloat, stDouble, stCurrency, stBigDecimal:
             Result[i] := CompareFloat_Asc;
           stDate, stTime, stTimestamp:
             Result[i] := CompareDateTime_Asc;
@@ -3989,7 +4013,7 @@ begin
             Result[i] := CompareInt64_Desc;
           stByte, stWord, stLongWord, stULong:
             Result[i] := CompareUInt64_Desc;
-          stFloat, stDouble, stBigDecimal:
+          stFloat, stDouble, stCurrency, stBigDecimal:
             Result[i] := CompareFloat_Desc;
           stDate, stTime, stTimestamp:
             Result[i] := CompareDateTime_Desc;

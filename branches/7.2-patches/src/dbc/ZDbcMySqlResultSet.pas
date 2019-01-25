@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils, Types,
   {$IFDEF NO_UNIT_CONTNRS}ZClasses{$ELSE}Contnrs{$ENDIF},
@@ -83,6 +84,9 @@ type
   end;
 
   {** Implements MySQL ResultSet. }
+
+  { TZAbstractMySQLResultSet }
+
   TZAbstractMySQLResultSet = class(TZAbstractResultSet)
   private
     FHandle: PMySQL;
@@ -101,7 +105,8 @@ type
     constructor Create(const PlainDriver: IZMySQLPlainDriver;
       const Statement: IZStatement; const SQL: string; Handle: PMySQL;
       AffectedRows: PInteger);
-    procedure Close; override;
+    procedure BeforeClose; override;
+    procedure AfterClose; override;
 
     function IsNull(ColumnIndex: Integer): Boolean; override;
     function GetPAnsiChar(ColumnIndex: Integer; out Len: NativeUInt): PAnsiChar; override;
@@ -151,7 +156,7 @@ type
     constructor Create(const PlainDriver: IZMySQLPlainDriver; const Statement: IZStatement;
       const SQL: string; MySQL: PMySQL; MySQL_Stmt: PMySql_Stmt);
 
-    procedure Close; override;
+    procedure AfterClose; override;
 
     function IsNull(ColumnIndex: Integer): Boolean; override;
     function GetPAnsiChar(ColumnIndex: Integer; out Len: NativeUInt): PAnsiChar; override;
@@ -225,7 +230,9 @@ type
       StmtHandle: PMySql_Stmt; ColumnIndex: Cardinal);
   End;
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 
 uses
   Math, {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings,{$ENDIF}
@@ -403,6 +410,11 @@ begin
   LastWasNull := Result = nil;
 end;
 
+procedure TZAbstractMySQLResultSet.BeforeClose;
+begin
+  inherited BeforeClose;
+end;
+
 function TZAbstractMySQLResultSet.GetBuffer(ColumnIndex: Integer): PAnsiChar;
 begin
 {$IFNDEF DISABLE_CHECKING}
@@ -471,11 +483,11 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZAbstractMySQLResultSet.Close;
+procedure TZAbstractMySQLResultSet.AfterClose;
 begin
-  inherited Close;
   FQueryHandle := nil;
   FRowHandle := nil;
+  inherited AfterClose;
 end;
 
 {**
@@ -1136,11 +1148,11 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZAbstractMySQLPreparedResultSet.Close;
+procedure TZAbstractMySQLPreparedResultSet.AfterClose;
 begin
   if Assigned(FBindBuffer) then
     FreeAndNil(FBindBuffer);
-  inherited Close;
+  inherited AfterClose;
   FPrepStmt := nil;
 end;
 
@@ -1196,9 +1208,9 @@ begin
           FRawTemp := IntToRaw(PWord(FColBind^.buffer)^);
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          FRawTemp := IntToRaw(PLongInt(FColBind^.buffer)^)
+          FRawTemp := IntToRaw(PInteger(FColBind^.buffer)^)
         else
-          FRawTemp := IntToRaw(PLongWord(FColBind^.buffer)^);
+          FRawTemp := IntToRaw(PCardinal(FColBind^.buffer)^);
       FIELD_TYPE_FLOAT:
         FRawTemp := FloatToSQLRaw(PSingle(FColBind^.buffer)^);
       FIELD_TYPE_DOUBLE:
@@ -1318,9 +1330,9 @@ begin
           Result := IntToRaw(PWord(FColBind^.buffer)^);
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := IntToRaw(PLongInt(FColBind^.buffer)^)
+          Result := IntToRaw(PInteger(FColBind^.buffer)^)
         else
-          Result := IntToRaw(PLongWord(FColBind^.buffer)^);
+          Result := IntToRaw(PCardinal(FColBind^.buffer)^);
       FIELD_TYPE_FLOAT:
         Result := FloatToSQLRaw(PSingle(FColBind^.buffer)^);
       FIELD_TYPE_DOUBLE:
@@ -1417,9 +1429,9 @@ begin
           Result := PWord(FColBind^.buffer)^ <> 0;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^ <> 0
+          Result := PInteger(FColBind^.buffer)^ <> 0
         else
-          Result := PLongWord(FColBind^.buffer)^ <> 0;
+          Result := PCardinal(FColBind^.buffer)^ <> 0;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^) <> 0;
       FIELD_TYPE_DOUBLE:    Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PDouble(FColBind^.buffer)^) <> 0;
       FIELD_TYPE_NULL:      Result := False;
@@ -1496,7 +1508,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
@@ -1578,7 +1590,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
@@ -1659,9 +1671,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
       FIELD_TYPE_DOUBLE:    Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PDouble(FColBind^.buffer)^);
       FIELD_TYPE_NULL:      Result := 0;
@@ -1740,7 +1752,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
@@ -1822,9 +1834,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
       FIELD_TYPE_DOUBLE:    Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PDouble(FColBind^.buffer)^);
       FIELD_TYPE_NULL:      Result := 0;
@@ -1904,7 +1916,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
@@ -1986,9 +1998,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
       FIELD_TYPE_DOUBLE:    Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PDouble(FColBind^.buffer)^);
       FIELD_TYPE_NULL:      Result := 0;
@@ -2068,7 +2080,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}Trunc(PSingle(FColBind^.buffer)^);
@@ -2149,7 +2161,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := PSingle(FColBind^.buffer)^;
@@ -2172,7 +2184,7 @@ begin
       FIELD_TYPE_BLOB, FIELD_TYPE_GEOMETRY:
         if ( FColBind^.length > 0 ) and
            (FColBind^.length < 30{Max Extended Length = 28 ??} ) then
-          RawToFloatDef(GetBlob(ColumnIndex).GetBuffer, '.', 0, Result)
+          RawToFloatDef(GetBlob(ColumnIndex).GetBuffer, AnsiChar('.'), 0, Result)
         else //avoid senceless processing
           Result := 0;
       else
@@ -2216,9 +2228,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     if FColBind^.decimals < 20
                             then Result := RoundTo(PSingle(FColBind^.buffer)^, FColBind^.decimals*-1)
                             else Result := PSingle(FColBind^.buffer)^;
@@ -2288,7 +2300,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     if FColBind^.decimals < 20
@@ -2315,7 +2327,7 @@ begin
       FIELD_TYPE_BLOB, FIELD_TYPE_GEOMETRY:
         if ( FColBind^.length > 0 ) and
            (FColBind^.length < 29{Max Extended Length = 28 ??+#0} ) then
-          RawToFloatDef(GetBlob(ColumnIndex).GetBuffer, '.', 0, Result)
+          RawToFloatDef(GetBlob(ColumnIndex).GetBuffer, AnsiChar('.'), 0, Result)
         else //avoid senceless processing
           Result := 0;
       else
@@ -2414,9 +2426,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := PSingle(FColBind^.buffer)^;
       FIELD_TYPE_DOUBLE:    Result := PDouble(FColBind^.buffer)^;
       FIELD_TYPE_NULL:      Result := 0;
@@ -2496,9 +2508,9 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
-          Result := PLongWord(FColBind^.buffer)^;
+          Result := PCardinal(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := PSingle(FColBind^.buffer)^;
       FIELD_TYPE_DOUBLE:    Result := PDouble(FColBind^.buffer)^;
       FIELD_TYPE_NULL:      Result := 0;
@@ -2579,7 +2591,7 @@ begin
           Result := PWord(FColBind^.buffer)^;
       FIELD_TYPE_LONG:
         if FColBind^.is_signed then
-          Result := PLongInt(FColBind^.buffer)^
+          Result := PInteger(FColBind^.buffer)^
         else
           Result := PLongWord(FColBind^.buffer)^;
       FIELD_TYPE_FLOAT:     Result := PSingle(FColBind^.buffer)^;
@@ -3032,4 +3044,5 @@ begin
   FQueryHandle := nil;
 end;
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 end.

@@ -55,8 +55,9 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
-  {$IFDEF WITH_TOBJECTLIST_INLINE}
+  {$IFDEF WITH_TOBJECTLIST_REQUIRES_SYSTEM_TYPES}
     System.Types, System.Contnrs
   {$ELSE}
     {$IFNDEF NO_UNIT_CONTNRS} Contnrs{$ELSE}ZClasses{$ENDIF}
@@ -145,7 +146,9 @@ type
       OldRowAccessor, NewRowAccessor: TZRowAccessor; Resolver: IZCachedResolver); override;
   end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses
   ZMessages, ZDbcSQLiteUtils, ZEncoding, ZDbcLogging, ZFastCode, ZDbcSqLite,
@@ -280,10 +283,12 @@ constructor TZSQLiteResultSet.Create(const PlainDriver: IZSQLitePlainDriver;
   const Statement: IZStatement; const SQL: string; const Handle: Psqlite;
   const StmtHandle: Psqlite_vm; const UndefinedVarcharAsStringLength: Integer;
   ExtendedErrorMessage: Boolean);
+var Metadata: TContainedObject;
 begin
-  inherited Create(Statement, SQL, TZSQLiteResultSetMetadata.Create(
-    Statement.GetConnection.GetMetadata, SQL, Self),
-    Statement.GetConnection.GetConSettings);
+  if PlainDriver.CompiledWith_SQLITE_ENABLE_COLUMN_METADATA
+  then MetaData := TZSQLiteResultSetMetadata.Create(Statement.GetConnection.GetMetadata, SQL, Self)
+  else MetaData := TZAbstractResultSetMetadata.Create(Statement.GetConnection.GetMetadata, SQL, Self);
+  inherited Create(Statement, SQL, MetaData, Statement.GetConnection.GetConSettings);
 
   FHandle := Handle;
   FStmtHandle := StmtHandle;
@@ -351,7 +356,7 @@ begin
       else
         ZSetString(P, ZFastCode.StrLen(P), tmp);
       ColumnType := ConvertSQLiteTypeToSQLType(tmp, FUndefinedVarcharAsStringLength,
-        FieldPrecision{%H-}, FieldDecimals{%H-}, ConSettings.CPType);
+        FieldPrecision, FieldDecimals, ConSettings.CPType);
 
       if ColumnType in [stString, stUnicodeString, stAsciiStream, stUnicodeStream] then
       begin
@@ -1101,4 +1106,5 @@ begin
 end;
 // <-- ms
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 end.

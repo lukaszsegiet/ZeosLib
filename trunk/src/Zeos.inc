@@ -87,7 +87,6 @@
   // Defines that go for ALL still supported Delphi's   (usually means they were under ifndef fpc)
   {$DEFINE WITH_DBTABLES}                 //Have the BDE DBTables Unit
   {$DEFINE WITH_DBCONSTS}                 //Delphi DBCONSTS, FPC DBCONST
-  {$DEFINE WITH_ASLARGEINT}               // tlargeint aslargeint. Fixed 2.6.0+ or 2.6.2+ probably
   {$DEFINE WITH_ASCURRENCY}               // Has AsCurrency.
   {$DEFINE WITH_ASVARIANT}                // Has AsVariant
   {$DEFINE WITH_IPROVIDER}                // Turn on IProviderSupport interface
@@ -139,7 +138,6 @@
         {$IF CompilerVersion >= 18} //Delphi 2006+
           {$UNDEF WITH_UINT64_C1118_ERROR}            //2006+ has no problems to assign code constants for UInt64
           {$UNDEF WITH_MILLISECONDOFTHEYEAR_BUG}      //D7-D005 Bug -> a Int64 Cast of SecondOfTheYear(AValue) is fixed
-          {$UNDEF WITH_OVERLOAD_BUG}                  //2006+ has no problems with ambiguous overload (?)
           {$UNDEF Use_FastCodeFillChar}               //FastCode FillChar() is included since D2006
 
           {$DEFINE WITH_DEPRECATED_EXTRACTFIELDNAME}  //DB.pas proc ExtractFieldName String overload is deprecated}
@@ -147,9 +145,11 @@
           {$DEFINE WITH_WIDESTRUTILS}                 //WideStrUtils unit introduced.
           {$DEFINE SUPPORTS_UINT64_CONSTS}            //compiler supports integer constants with 20 didgits
           {$DEFINE WITH_WIDESTRINGS_GETFIELDNAMES}    //overload of GetFieldNames(List: TWideStrings) does exists;
+          {$DEFINE WITH_WIDEDATASET}                  //TWidedataset exists
           {$DEFINE WITH_PWIDECHAR_TOWIDESTRING}       //Able to pass pwidechar to a widestring parameter
           {$DEFINE WITH_IPROVIDERWIDE}                //IProvider -W widestring using interface
           {$DEFINE WITH_MM_CAN_REALLOC_EXTERNAL_MEM}  //sinc FastMM4 Memorymanager IDE can FreeMem/AllocMem/ReallocMem for Pointers which have been allocated in a different object
+          {$DEFINE WITH_ASLARGEINT}                   // tlargeint aslargeint. Fixed 2.6.0+ or 2.6.2+ probably
           {$DEFINE WITH_WIDEMEMO}                     //Have ftWideMemo
           {$DEFINE WITH_FTWIDESTRING}                 //Have ftWideString
           {$DEFINE WITH_FTFIXEDWIDECHAR}              //Have ftFixedWideChar
@@ -161,6 +161,7 @@
             {$UNDEF VER150BELOW}      //found in ZTestBugCompPostgreSql.pas
 
             {$IF CompilerVersion >= 20} //Delphi 2009+
+             {$UNDEF WITH_OVERLOAD_BUG}                  //2009+ has no problems with ambiguous overload (byte/word)
               {$UNDEF WITH_DEPRECATED_EXTRACTFIELDNAME} //DB.pas proc ExtractFieldName String overload is no more deprecated -> Unicode}
               {$UNDEF BCC32_vtDateTime_ERROR}           //resolved by ide
               {$UNDEF USE_FAST_CHARPOS}                 // Since Unicode this function is useless
@@ -200,32 +201,16 @@
                   {$DEFINE WITH_FORMATSETTINGS}
                   {$DEFINE WITH_UNICODEFROMLOCALECHARS}
                   {$DEFINE WITH_RTLCONSTS_SInvalidGuidArray}
+                  {$DEFINE WITH_TOBJECTLIST_REQUIRES_CLASSES}       //TObjectList.Remove, add ... are inlined need unit classes
 
                   {$IF CompilerVersion >= 23} //Delphi XE2+
+                    {$IFNDEF MSWINDOWS}
+                      {$DEFINE HAVE_GetProcAddressW} //GetProcAddress uses a PWideChar 
+                    {$ENDIF}
                     {$IFNDEF WIN32}
                       {$UNDEF WITH_DBTABLES} //BDE unit DBTables (TestSuites) isn't supported on CPU64
                       {$IFNDEF PUREPASCAL}
                         {$DEFINE PUREPASCAL}
-                      {$ENDIF}
-                      {$IFDEF NEXTGEN}
-                        {$UNDEF WITH_ASANSISTRING}
-                        {$UNDEF WITH_UNITANSISTRINGS}
-                        {$UNDEF WITH_WIDESTRUTILS}
-                        {$DEFINE TLIST_IS_DEPRECATED}
-                        {$DEFINE NO_INLINE_SIZE_CHECK} 
-                        {$DEFINE NO_ANSISTRING}
-                        {$DEFINE NO_PANSICHAR}
-                        {$DEFINE NO_ANSICHAR} 
-                        {$DEFINE TSYSCHARSET_IS_DEPRECATED} //for compiler warning TSysCharSet is deprected use CharHelper function instead
-                        {$DEFINE NO_RAW_HEXTOBIN} //raw/pAnsichar version of HexToBin does not exits  
-                        {$DEFINE MISS_RBS_SETSTRING_OVERLOAD} //system.SetString is not available for raw strings or i (EH) have no clue how to use it
-                        {$DEFINE NO_UNIT_CONTNRS} //unit Contnrs (TObjectList) doesn't exist any mory 
-						{$DEFINE WITH_USC2_ANSICOMPARESTR_ONLY} //nextgen doesn't have a raw ansicomnparestr function
-                        {$IF CompilerVersion <= 30}
-                          {$DEFINE NO_UTF8STRING}
-                          {$UNDEF WITH_RAWBYTESTRING}
-                          {$DEFINE WITH_TBYTES_AS_RAWBYTESTRING} //this compiler is buggy: _RawByteString is declared but skope is in System.pas only (UTF8Encode returns a unusable value f.e.)
-                        {$IFEND}
                       {$ENDIF}
                     {$ELSE}
                       {$IFDEF PatchSystemMove}
@@ -239,11 +224,39 @@
                     {$DEFINE WITH_FASTCODE_INTTOSTR}      //Since XE2 the full purepascal IntToStr func is included
                     {$DEFINE WITH_PUREPASCAL_INTPOWER}    //Since XE2 a buggy pure pascal version of Math.IntPower was introduced
                     {$IF CompilerVersion >= 24} //Delphi XE3+
+                      {$UNDEF WITH_WIDEDATASET}               //TWideDataset and TDataSet are merged together: https://forums.embarcadero.com/thread.jspa?messageID=499588
                       {$DEFINE WITH_TVALUEBUFFER}             //SetFieldData/GetFieldData and Parameters using TValueBuffer instead of Pointer
                       {$DEFINE WITH_BOOKMARKDATA_TBOOKMARK}
                       {$UNDEF WITH_WIDESTRINGS_GETFIELDNAMES} //GetFieldNames with TWideStrings has been removed
                       {$DEFINE WITH_GENERIC_TLISTTFIELD}      //GetFieldList() uses the generic TList<TField>
 
+                      {$IFDEF NEXTGEN}
+                        {$UNDEF WITH_UNIT_WIDESTRINGS}
+                        {$UNDEF WITH_ASANSISTRING}
+                        {$UNDEF WITH_UNITANSISTRINGS}
+                        {$UNDEF WITH_WIDESTRUTILS}
+                        {$DEFINE TLIST_IS_DEPRECATED}
+                        {$DEFINE NO_INLINE_SIZE_CHECK}
+                        {$DEFINE NO_ANSISTRING}
+                        {$DEFINE NO_RAW_STRINGSTREAM}
+                        {$DEFINE NO_TDATASET_TRANSLATE} //deprecated TDataSet procedure translate is omitted
+                        {$DEFINE NO_PANSICHAR}
+                        {$DEFINE NO_ANSICHAR}
+                        {$DEFINE TSYSCHARSET_IS_DEPRECATED} //for compiler warning TSysCharSet is deprected use CharHelper function instead
+                        {$DEFINE NO_RAW_HEXTOBIN} //raw/pAnsichar version of HexToBin does not exits
+                        {$DEFINE MISS_RBS_SETSTRING_OVERLOAD} //system.SetString is not available for raw strings or i (EH) have no clue how to use it
+                        {$DEFINE NO_UNIT_CONTNRS} //unit Contnrs (TObjectList) doesn't exist any mory
+                        {$DEFINE WITH_USC2_ANSICOMPARESTR_ONLY} //nextgen doesn't have a raw ansicomnparestr function
+                        {$DEFINE WITH_TRECBUF_PBYTE}
+                        {$DEFINE WITH_InternalAddRecord_TRecBuf}
+                        {$DEFINE WITH_AllocRecBuf_TRecBuf}
+                        {$DEFINE WITH_FreeRecBuf_TRecBuf}
+                        {$IF CompilerVersion <= 30}
+                          {$DEFINE NO_UTF8STRING}
+                          {$UNDEF WITH_RAWBYTESTRING}
+                          {$DEFINE WITH_TBYTES_AS_RAWBYTESTRING} //this compiler is buggy: _RawByteString is declared but skope is in System.pas only (UTF8Encode returns a unusable value f.e.)
+                        {$IFEND}
+                      {$ENDIF}
                       {$IF CompilerVersion >= 25} //Delphi XE4+
                         {$DEFINE WITH_VAR_TVALUEBUFFER}	        //GetFieldata overloads using !var! Buffer: TValueBuffer
                         {$DEFINE WITH_BUFFERS_IS_TRECBUF}       //Buffers[index] is TRecBuf type NativeInt
@@ -251,7 +264,7 @@
                         {$IFNDEF NEXTGEN}
                           {$DEFINE WITH_ANSISTRINGPOS_DEPRECATED} //AnsiStringPos deprecated moved to AnsiStrings
                           {$DEFINE WITH_STRLEN_DEPRECATED}        //StrLen deprecated moved to AnsiStrings
-                          {$DEFINE WITH_TOBJECTLIST_INLINE}       //TObjectList.Remove, add ... are inlined 	need System.Types
+                          {$DEFINE WITH_TOBJECTLIST_REQUIRES_SYSTEM_TYPES} //TObjectList.Remove, add ... are inlined and System.Types
                           {$DEFINE WITH_ANSISTRCOMP_DEPRECATED}   //AnsiStrComp is deprecated moved to AnsiStrings
                           {$DEFINE WITH_ANSISTRLCOMP_DEPRECATED}  //AnsiStrLComp is deprecated moved to AnsiStrings
                           {$DEFINE WITH_STRDISPOSE_DEPRECATED}    //StrDispose is deprecated moved to AnsiStrings
@@ -277,6 +290,8 @@
                                   {$IF CompilerVersion >= 31} //Delphi Berlin+
                                     {$IF CompilerVersion >= 32} //Delphi Tokyo+
                                       {$DEFINE WITH_VIRTUAL_TFIELD_GETASGUID} //TField has now a virtual GetAsGUID function 
+                                      {$DEFINE WITH_IProviderSupportNG}   //TDataset now supports IProviderSupportNG
+                                      {$DEFINE WITH_InternalGotoBookmark_TBookmark}
                                       {$DEFINE WITH_LIFECYCLES} //TDataSet.DefaultFields is deprecated use LifeCycles instead
                                     {$ELSE !CompilerVersion >= 32} //Delphi Berlin+
                                     {$IFEND CompilerVersion >= 32}
@@ -374,9 +389,11 @@
 
 // Disables checking code.
 // Use Range checking option to turn on/off optimization
-{$IFOPT R-}
+// 2018-09-23 - disabled for now because we don't want to test that with the
+// test suites - even though we want the range checks to be enabled.
+//{$IFOPT R-}
 {$DEFINE DISABLE_CHECKING}
-{$ENDIF}
+//{$ENDIF}
 
 
 // Enables MySQL support in TZConnection/TZDataset
@@ -395,8 +412,12 @@
 {$ENDIF}
 
 // Enables ADO support in TZConnection/TZDataset
-{$IF not defined(ZEOS_DISABLE_ADO) and defined(MSWINDOWS)}
+{$IF defined(MSWINDOWS)}
+  {$IF not defined(ZEOS_DISABLE_ADO)}
   {$DEFINE ENABLE_ADO}
+  {$IFEND}
+{$ELSE}
+  {$DEFINE ZEOS_DISABLE_ADO}
 {$IFEND}
 
 // Enables Interbase/Firebird support in TZConnection/TZDataset
@@ -420,8 +441,12 @@
 {$ENDIF}
 
 // Enables OleDB support in TZConnection/TZDataset
-{$IF not defined(ZEOS_DISABLE_OLEDB) and defined(MSWINDOWS)}
+{$IF defined(MSWINDOWS)}
+  {$IF not defined(ZEOS_DISABLE_OLEDB)}
   {$DEFINE ENABLE_OLEDB}
+  {$IFEND}
+{$ELSE}
+  {$DEFINE ZEOS_DISABLE_OLEDB}
 {$IFEND}
 
 // Enables ODBC support in TZConnection/TZDataset

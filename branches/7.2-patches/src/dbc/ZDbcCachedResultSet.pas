@@ -164,7 +164,7 @@ type
       ConSettings: PZConSettings);
     destructor Destroy; override;
 
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure ResetCursor; override;
 
     //======================================================================
@@ -317,7 +317,7 @@ type
       const ResultSet: IZResultSet; const SQL: string;
       const Resolver: IZCachedResolver; ConSettings: PZConSettings);
 
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure ResetCursor; override;
     function GetMetaData: IZResultSetMetaData; override;
 
@@ -772,16 +772,12 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZAbstractCachedResultSet.Close;
+procedure TZAbstractCachedResultSet.AfterClose;
 var
   I: Integer;
 begin
-  if Closed then
-     Exit;
-  inherited Close;
-
-  if Assigned(FRowAccessor) then
-  begin
+  inherited AfterClose;
+  if Assigned(FRowAccessor) then begin
     for I := 0 to FRowsList.Count - 1 do
       FRowAccessor.DisposeBuffer(PZRowBuffer(FRowsList[I]));
     for I := 0 to FInitialRowsList.Count - 1 do
@@ -807,19 +803,17 @@ procedure TZAbstractCachedResultSet.ResetCursor;
 var
   I: Integer;
 begin
-  if not Closed then begin
-    if Assigned(FRowAccessor) then
-    begin
-      for I := 0 to FRowsList.Count - 1 do
-        FRowAccessor.DisposeBuffer(PZRowBuffer(FRowsList[I]));
-      for I := 0 to FInitialRowsList.Count - 1 do
-        FRowAccessor.DisposeBuffer(PZRowBuffer(FInitialRowsList[I]));
-      FRowsList.Clear;
-      FInitialRowsList.Clear;
-      FCurrentRowsList.Clear;
-    end;
-    inherited ResetCursor;
+  if Assigned(FRowAccessor) then
+  begin
+    for I := 0 to FRowsList.Count - 1 do
+      FRowAccessor.DisposeBuffer(PZRowBuffer(FRowsList[I]));
+    for I := 0 to FInitialRowsList.Count - 1 do
+      FRowAccessor.DisposeBuffer(PZRowBuffer(FInitialRowsList[I]));
+    FRowsList.Clear;
+    FInitialRowsList.Clear;
+    FCurrentRowsList.Clear;
   end;
+  inherited ResetCursor;
 end;
 
 //======================================================================
@@ -1994,7 +1988,10 @@ end;
 function TZAbstractCachedResultSet.MoveAbsolute(Row: Integer): Boolean;
 begin
 {$IFNDEF DISABLE_CHECKING}
-  CheckClosed;
+  // 2018-09-16 commented out because it seems to be current policy for other
+  // result sets to not raise an exception if the result set is closed but simply
+  // return false here. What is our specification?
+  //CheckClosed;
   if (ResultSetType = rtForwardOnly) and (Row < RowNo) then
     RaiseForwardOnlyException;
 {$ENDIF}
@@ -2360,9 +2357,10 @@ begin
     RowAccessor.RowBuffer.Index := GetNextRowIndex;
     RowAccessor.RowBuffer.UpdateType := utUnmodified;
 
-    for I := FirstDbcIndex to ColumnsInfo.Count{$IFDEF GENERIC_INDEX}-1{$ENDIF} do
-    begin
-      case TZColumnInfo(ColumnsInfo[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}]).ColumnType of
+    for I := FirstDbcIndex to ColumnsInfo.Count{$IFDEF GENERIC_INDEX}-1{$ENDIF} do begin
+      if ResultSet.IsNull(i) then
+        continue
+      else case TZColumnInfo(ColumnsInfo[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}]).ColumnType of
         stBoolean: RowAccessor.SetBoolean(I, ResultSet.GetBoolean(I));
         stByte: RowAccessor.SetByte(I, ResultSet.GetByte(I));
         stShort: RowAccessor.SetShort(I, ResultSet.GetShort(I));
@@ -2384,7 +2382,6 @@ begin
         stAsciiStream, stBinaryStream, stUnicodeStream:
           RowAccessor.SetBlob(I, ResultSet.GetBlob(I));
         stDataSet: RowAccessor.SetDataSet(i, ResultSet.GetDataSet(I));
-
       end;
       if ResultSet.WasNull then
         RowAccessor.SetNull(I);
@@ -2413,15 +2410,9 @@ var
   I: Integer;
   ColumnInfo: TZColumnInfo;
   MetaData : IZResultSetMetaData;
-  RequiresLoading: Boolean;
 begin
   ColumnsInfo.Clear;
   MetaData := FResultSet.GetMetadata;
-  RequiresLoading := false;
-  for I := FirstDbcIndex to Metadata.GetColumnCount{$IFDEF GENERIC_INDEX}-1{$ENDIF}
-  do RequiresLoading := RequiresLoading or (MetaData.GetColumnType(I) = stUnknown);
-  if RequiresLoading
-  then MetaData.IsAutoIncrement(FirstDbcIndex);
   for I := FirstDbcIndex to Metadata.GetColumnCount{$IFDEF GENERIC_INDEX}-1{$ENDIF} do
   begin
     ColumnInfo := TZColumnInfo.Create;
@@ -2455,16 +2446,12 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZCachedResultSet.Close;
+procedure TZCachedResultSet.AfterClose;
 begin
-  if not Closed then begin
-    inherited Close;
-    if Assigned(ColumnsInfo) then //close may release the object -> a destroy will be called -> the list does'nt exist anymore
-      ColumnsInfo.Clear;
-    If Assigned(FResultset) then begin
-      FResultset.Close;
-      FResultSet := nil;
-    end;
+  inherited AfterClose;
+  If Assigned(FResultset) then begin
+    FResultset.Close;
+    FResultSet := nil;
   end;
 end;
 
@@ -2594,7 +2581,7 @@ function TZCachedResultSet.MoveAbsolute(Row: Integer): Boolean;
 begin
   { Checks for maximum row. }
   Result := False;
-  if (MaxRows > 0) and (Row > MaxRows) then
+  if ((MaxRows > 0) and (Row > MaxRows)) then
     Exit;
 
   { Processes negative rows }

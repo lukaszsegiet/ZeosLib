@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcConnection, ZDbcIntfs, ZCompatibility, ZDbcLogging, ZPlainDbLibDriver,
@@ -142,7 +143,9 @@ var
   {** The common driver manager object. }
   DBLibDriver: IZDriver;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
 uses
   {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings,{$ENDIF} ZConnProperties, ZDbcProperties,
@@ -268,8 +271,10 @@ var
   ASQL: RawByteString;
 begin
   FHandle := GetConnectionHandle;
-  if GetPlainDriver.dbCancel(FHandle) <> DBSUCCEED then
-    CheckDBLibError(lcExecute, SQL);
+  //2018-09-17 commented by marsupilami79 - this should not be called because it
+  //just hides logic errors. -> not fully processed result sets would be canceled.
+  //if GetPlainDriver.dbCancel(FHandle) <> DBSUCCEED then
+  //  CheckDBLibError(lcExecute, SQL);
   if FProvider = dpMsSQL then
     ASQL := {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings.{$ENDIF}StringReplace(Sql, '\'#13, '\\'#13, [rfReplaceAll])
   else
@@ -872,4 +877,5 @@ finalization
     DriverManager.DeregisterDriver(DBLibDriver);
   DBLibDriver := nil;
   FreeAndNil(DBLIBCriticalSection);
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.

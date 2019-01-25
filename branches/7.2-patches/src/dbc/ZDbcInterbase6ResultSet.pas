@@ -55,8 +55,9 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 uses
-  {$IFDEF WITH_TOBJECTLIST_INLINE}System.Types, System.Contnrs{$ELSE}Types{$ENDIF},
+  {$IFDEF WITH_TOBJECTLIST_REQUIRES_SYSTEM_TYPES}System.Types, System.Contnrs{$ELSE}Types{$ENDIF},
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   {$IF defined (WITH_INLINE) and defined(MSWINDOWS) and not defined(WITH_UNICODEFROMLOCALECHARS)}Windows, {$IFEND}
   ZDbcIntfs, ZDbcResultSet, ZDbcInterbase6, ZPlainFirebirdInterbaseConstants,
@@ -81,6 +82,7 @@ type
     FCodePageArray: TWordDynArray;
     FStmtType: TZIbSqlStatementType;
     FIBConnection: IZInterbase6Connection;
+    FClientCP: Word;
     function GetIbSqlSubType(const Index: Word): Smallint; {$IF defined(WITH_INLINE) and not (defined(WITH_URW1135_ISSUE) or defined(WITH_URW1111_ISSUE))} inline; {$IFEND}
     function GetQuad(ColumnIndex: Integer): TISC_QUAD;
   protected
@@ -91,7 +93,7 @@ type
       StatementHandle: TISC_STMT_HANDLE; const XSQLDA: IZSQLDA;
       WasLastResult, CachedBlob: boolean; StmtType: TZIbSqlStatementType);
 
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure ResetCursor; override;
 
     function IsNull(ColumnIndex: Integer): Boolean; override;
@@ -155,7 +157,9 @@ type
     function IsAutoIncrement({%H-}ColumnIndex: Integer): Boolean; override;
   End;
 
+{$ENDIF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 
 uses
 {$IFNDEF FPC}
@@ -234,7 +238,8 @@ begin
   ResultSetConcurrency := rcReadOnly;
 
   FCodePageArray := FPlainDriver.GetCodePageArray;
-  FCodePageArray[ConSettings^.ClientCodePage^.ID] := ConSettings^.ClientCodePage^.CP; //reset the cp if user wants to wite another encoding e.g. 'NONE' or DOS852 vc WIN1250
+  FClientCP := ConSettings^.ClientCodePage^.CP;
+  FCodePageArray[ConSettings^.ClientCodePage^.ID] := FClientCP; //reset the cp if user wants to wite another encoding e.g. 'NONE' or DOS852 vc WIN1250
 
   Open;
 end;
@@ -252,14 +257,13 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZInterbase6XSQLDAResultSet.Close;
+procedure TZInterbase6XSQLDAResultSet.AfterClose;
 begin
   { Free output allocated memory }
   FXSQLDA := nil;
   FIZSQLDA := nil;
-  inherited Close; //Calls ResetCursor so FreeStatement(FIBConnection.GetPlainDriver, FStmtHandle, DSQL_CLOSE); is called
-  { Free allocate sql statement }
   FStmtHandle := 0; //don't forget!
+  inherited AfterClose;
 end;
 
 {**
@@ -1314,6 +1318,7 @@ var
   SQLCode: SmallInt;
   P: PAnsiChar;
   Len: NativeUInt;
+  CP: Word;
 begin
   LastWasNull := IsNull(ColumnIndex);
   if LastWasNull then
@@ -1354,13 +1359,12 @@ begin
           SQL_VARYING   :
             begin
               GetPCharFromTextVar(SQLCode, sqldata, sqllen, P, Len);
-              if sqlsubtype > High(FCodePageArray) then
-                Result := ZConvertPRawToUTF8(P, Len, ConSettings^.ClientCodePage^.cp)
-              else
-                if (FCodePageArray[sqlsubtype] = zCP_UTF8) then
-                  ZSetString(P, Len, Result)
-                else
-                  Result := ZConvertPRawToUTF8(P, Len, sqlsubtype);
+              if ConSettings^.ClientCodePage^.ID = CS_NONE
+              then CP := FCodePageArray[sqlsubtype and 255]
+              else CP := FClientCP;
+              if CP = zCP_UTF8
+              then ZSetString(P, Len, Result)
+              else Result := ZConvertPRawToUTF8(P, Len, CP);
             end;
           SQL_BLOB      :
             Begin
@@ -1390,10 +1394,10 @@ end;
 }
 function TZInterbase6XSQLDAResultSet.GetString(ColumnIndex: Integer): String;
 var
-  SubType: SmallInt;
   SQLCode: SmallInt;
   P: PAnsiChar;
   Len: NativeUInt;
+  CP: Word;
 begin
 {$IFNDEF DISABLE_CHECKING}
   CheckColumnConvertion(ColumnIndex, stString);
@@ -1437,28 +1441,17 @@ begin
           SQL_VARYING   :
             begin
               GetPCharFromTextVar(SQLCode, sqldata, sqllen, P, Len);
-
-              SubType := GetIbSqlSubType(ColumnIndex);
-              if SubType > High(FCodePageArray) then
-                {$IFDEF UNICODE}
-                Result := PRawToUnicode(P, Len, ConSettings^.ClientCodePage^.CP)
-                {$ELSE}
-                begin
-                  ZSetString(P, Len, FRawTemp);
-                  Result := ConSettings^.ConvFuncs.ZRawToString(FRawTemp,
-                    ConSettings^.ClientCodePage^.CP, ConSettings^.CTRL_CP);
-                end
-                {$ENDIF}
-              else
-                {$IFDEF UNICODE}
-                Result := PRawToUnicode(P, Len, FCodePageArray[SubType]);
-                {$ELSE}
-                begin
-                  ZSetString(P, Len, FRawTemp);
-                  Result := ConSettings^.ConvFuncs.ZRawToString(FRawTemp,
-                    FCodePageArray[SubType], ConSettings^.CTRL_CP);
-                end;
-                {$ENDIF}
+              if ConSettings^.ClientCodePage^.ID = CS_NONE
+              then CP := FCodePageArray[sqlsubtype and 255]
+              else CP := FClientCP;
+              {$IFDEF UNICODE}
+              Result := PRawToUnicode(P, Len, CP)
+              {$ELSE}
+              begin
+                ZSetString(P, Len, FRawTemp);
+                Result := ConSettings^.ConvFuncs.ZRawToString(FRawTemp, CP, ConSettings^.CTRL_CP);
+              end
+              {$ENDIF}
             end;
           SQL_BLOB      :
             Begin
@@ -1497,9 +1490,9 @@ end;
 }
 function TZInterbase6XSQLDAResultSet.GetUnicodeString(ColumnIndex: Integer): ZWideString;
 var
-  SubType: SmallInt;
   P: PAnsiChar;
   Len: NativeUInt;
+  CP: Word;
 begin
 {$IFNDEF DISABLE_CHECKING}
   CheckColumnConvertion(ColumnIndex, stString);
@@ -1507,15 +1500,19 @@ begin
   LastWasNull := IsNull(ColumnIndex);
   if LastWasNull then
     Result := ''
-  else
-  begin
-    SubType := GetIbSqlSubType(ColumnIndex{$IFNDEF GENERIC_INDEX} -1{$ENDIF});
-
+  else begin
     P := GetPAnsiChar(ColumnIndex, Len);
-    if SubType > High(FCodePageArray) then
-      Result := PRawToUnicode(P, Len, ConSettings^.ClientCodePage^.CP)
-    else
-      Result := PRawToUnicode(P, Len, FCodePageArray[SubType]);
+    {$R-}
+    case FXSQLDA.sqlvar[ColumnIndex{$IFNDEF GENERIC_INDEX} -1{$ENDIF}].sqltype and not (1) of
+    {$IFDEF RangeCheckEnabled} {$R+} {$ENDIF}
+      SQL_TEXT, SQL_VARYING: begin
+          if ConSettings^.ClientCodePage^.ID = CS_NONE
+          then CP := FCodePageArray[GetIbSqlSubType(ColumnIndex{$IFNDEF GENERIC_INDEX} -1{$ENDIF}) and 255]
+          else CP := FClientCP;
+          Result := PRawToUnicode(P, Len, CP);
+        end;
+      else Result := Ascii7ToUnicodeString(P, Len);
+    end;
   end;
 end;
 
@@ -1658,14 +1655,10 @@ begin
         case FieldSqlType of
           stString, stUnicodeString:
             begin
-              CP := GetIbSqlSubType(I);
-              if (CP = ConSettings^.ClientCodePage^.ID) or //avoid the loops if we allready have the info's we need
-                 (CP > High(FCodePageArray)) then //spezial case for collations like PXW_INTL850 which are nowhere to find in docs
-                //see test Bug#886194, we retrieve 565 as CP...
-                ZCodePageInfo := ConSettings^.ClientCodePage
-              else
+              //see test Bug#886194, we retrieve 565 as CP... the modula get returns the FBID of CP
+              CP := FIZSQLDA.GetIbSqlSubType(I) and 255;
                 //see: http://sourceforge.net/p/zeoslib/tickets/97/
-                ZCodePageInfo := FPlainDriver.ValidateCharEncoding(CP); //get column CodePage info
+              ZCodePageInfo := FPlainDriver.ValidateCharEncoding(CP); //get column CodePage info
               ColumnCodePage := ZCodePageInfo^.CP;
               Precision := DataLen div ZCodePageInfo^.CharWidth;
               if ColumnType = stString then begin
@@ -1686,10 +1679,19 @@ begin
                   Precision := DataLen;
                 stShort, stSmall, stInteger, stLong:
                   Signed := True;
+                stCurrency, stBigDecimal: begin
+                  Signed  := True;
+                  Scale   := -FIZSQLDA.GetFieldScale(I);
+                  //first digit does not count because of overflow (FB does not allow this)
+                  case FIZSQLDA.GetIbSqlType(I) of
+                    SQL_SHORT:  Precision := 4;
+                    SQL_LONG:   Precision := 9;
+                    SQL_INT64:  Precision := 18;
+                  end;
+                end;
               end;
             end;
         end;
-
         ReadOnly := (TableName = '') or (ColumnName = '') or
           (ColumnName = 'RDB$DB_KEY') or (FieldSqlType = ZDbcIntfs.stUnknown);
 
@@ -1872,5 +1874,5 @@ begin
   Loaded := True;
   {$ENDIF}
 end;
-
+{$ENDIF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 end.

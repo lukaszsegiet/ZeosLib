@@ -487,8 +487,8 @@ begin
 
   try
     { load data to the stream }
-    BinStream.LoadFromFile(ExtractFilePath(ParamStr(0)) + '/../../../database/images/dogs.jpg');
-    StrStream.LoadFromFile(ExtractFilePath(ParamStr(0)) + '/../../../database/text/lgpl.txt');
+    BinStream.LoadFromFile(TestFilePath('images/dogs.jpg'));
+    StrStream.LoadFromFile(TestFilePath('text/lgpl.txt'));
     { post empty row }
     Query.SQL.Text := 'SELECT * FROM BLOB_VALUES';
     Query.Open;
@@ -546,9 +546,9 @@ begin
     Query.SQL.Text := 'SELECT * FROM TABLE864622';
     Query.Open;
     CheckEquals(Ord(ftInteger), Ord(Query.Fields[0].DataType));
-    CheckEquals(Ord(ftFloat), Ord(Query.Fields[1].DataType));
+    CheckEquals(Ord(ftBCD), Ord(Query.Fields[1].DataType));
     CheckEquals(1, Query.Fields[0].AsInteger);
-    CheckEquals(1.2, Query.Fields[1].AsFloat, 0.01);
+    CheckEquals(1.2, Query.Fields[1].AsCurrency);
   finally
     Query.Free;
   end;

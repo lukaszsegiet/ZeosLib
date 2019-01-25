@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcIntfs, ZDbcStatement, ZPlainSqLiteDriver, ZCompatibility, ZDbcLogging,
@@ -117,7 +118,9 @@ type
   end;
 
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses
   {$IFDEF WITH_UNITANSISTRINGS} AnsiStrings,{$ENDIF} ZDbcSqLiteUtils,
@@ -372,10 +375,10 @@ begin
   inherited UnPrepare;
   if Assigned(FStmtHandle) then begin
     ErrorCode := FPlainDriver.sqlite3_finalize(FStmtHandle);
+    FStmtHandle := nil; //Keep track we do not try to finalize the handle again on destroy or so
     if ErrorCode <> SQLITE_OK then
       CheckSQLiteError(FPlainDriver, FHandle, ErrorCode,
         lcUnprepStmt, 'sqlite3_finalize', ConSettings);
-    FStmtHandle := nil; //Keep track we do not try to finalize the handle again on destroy or so
   end;
 end;
 
@@ -573,5 +576,6 @@ begin
   inherited Create(Connection, '', Info, Handle);
 end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 end.
 

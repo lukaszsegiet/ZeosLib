@@ -55,8 +55,10 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils, Types,
+  {$IF defined(UNICODE) and not defined(WITH_UNICODEFROMLOCALECHARS)}Windows,{$IFEND}
   ZClasses, ZDbcIntfs, ZDbcStatement, ZDbcMySql, ZVariant, ZPlainMySqlDriver,
   ZPlainMySqlConstants, ZCompatibility, ZDbcLogging, ZDbcUtils;
 
@@ -210,7 +212,9 @@ type
     function GetMoreResults: Boolean; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 
 uses
   Math, DateUtils, ZFastCode, ZDbcMySqlUtils, ZDbcMySqlResultSet,
@@ -738,8 +742,8 @@ begin
           else PWord(PBuffer)^ := ClientVarManager.GetAsUInteger(InParamValues[i]);
         FIELD_TYPE_LONG:
           if Bind^.is_signed
-          then PLongInt(PBuffer)^ := ClientVarManager.GetAsInteger(InParamValues[i])
-          else PLongWord(PBuffer)^ := ClientVarManager.GetAsUInteger(InParamValues[i]);
+          then PInteger(PBuffer)^ := ClientVarManager.GetAsInteger(InParamValues[i])
+          else PCardinal(PBuffer)^ := ClientVarManager.GetAsUInteger(InParamValues[i]);
         FIELD_TYPE_LONGLONG:
           if Bind^.is_signed
           then PInt64(PBuffer)^ := ClientVarManager.GetAsInteger(InParamValues[i])
@@ -752,9 +756,9 @@ begin
               begin
                 Bind^.Length := 1;
                 if ClientVarManager.GetAsBoolean(InParamValues[i]) then
-                  PAnsiChar(PBuffer)^ := AnsiChar('Y')
+                  PByte(PBuffer)^ := Ord('Y')
                 else
-                  PAnsiChar(PBuffer)^ := AnsiChar('N');
+                  PByte(PBuffer)^ := Ord('N');
               end;
             stGUID:
               begin
@@ -1662,7 +1666,7 @@ begin
     FIELD_TYPE_BIT: case PULong(NativeUInt(MYSQL_FIELD)+FieldOffSets.length)^ of
                       0..8  : bind^.Length := SizeOf(Byte);
                       9..16 : bind^.Length := SizeOf(Word);
-                      17..32: bind^.Length := SizeOf(LongWord);
+                      17..32: bind^.Length := SizeOf(Cardinal);
                       else    bind^.Length := SizeOf(UInt64);
                     end;
     FIELD_TYPE_DATE:        bind^.Length := sizeOf(TMYSQL_TIME);
@@ -2086,4 +2090,5 @@ MySQL568PreparableTokens[28].MatchingGroup := 'SLAVE';
 MySQL568PreparableTokens[29].MatchingGroup := 'UNINSTALL';
   SetLength(MySQL568PreparableTokens[29].ChildMatches, 1);
   MySQL568PreparableTokens[29].ChildMatches[0] := 'PLUGIN';
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 end.

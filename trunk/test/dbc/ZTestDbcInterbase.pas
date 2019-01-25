@@ -192,9 +192,9 @@ end;
 
 procedure TZTestDbcInterbaseCase.TestBlobs;
 const
-  B_ID_Index = {$IFDEF GENERIC_INDEX}0{$ELSE}1{$ENDIF};
-  B_TEXT_Index = {$IFDEF GENERIC_INDEX}1{$ELSE}2{$ENDIF};
-  B_IMAGE_Index = {$IFDEF GENERIC_INDEX}2{$ELSE}3{$ENDIF};
+  B_ID_Index = FirstDbcIndex;
+  B_TEXT_Index = FirstDbcIndex+1;
+  B_IMAGE_Index = FirstDbcIndex+2;
 var
   Connection: IZConnection;
   PreparedStatement: IZPreparedStatement;
@@ -216,7 +216,7 @@ begin
   TempStream := nil;
   TextStream := TStringStream.Create('ABCDEFG');
   ImageStream := TMemoryStream.Create;
-  ImageStream.LoadFromFile(ExtractFilePath(ParamStr(0)) + '/../../../database/images/zapotec.bmp');
+  ImageStream.LoadFromFile(TestFilePath('images/zapotec.bmp'));
   try
     PreparedStatement := Connection.PrepareStatement(
       'INSERT INTO BLOB_VALUES (B_ID, B_TEXT, B_IMAGE) VALUES(?,?,?)');
@@ -274,7 +274,7 @@ begin
 
   TextStream := TStringStream.Create('ABCDEFG');
   ImageStream := TMemoryStream.Create;
-  ImageStream.LoadFromFile(ExtractFilePath(ParamStr(0)) + '/../../../database/images/zapotec.bmp');
+  ImageStream.LoadFromFile(TestFilePath('images/zapotec.bmp'));
 
   PreparedStatement := Connection.PrepareStatement(
     'INSERT INTO BLOB_VALUES (B_ID, B_TEXT, B_IMAGE) VALUES(?,?,?)');
@@ -300,7 +300,7 @@ begin
   ImageStream.Free;
   TextStream := TStringStream.Create('GFEDCBA');
   ImageStream := TMemoryStream.Create;
-  ImageStream.LoadFromFile(ExtractFilePath(ParamStr(0)) + '/../../../database/images/dogs.jpg');
+  ImageStream.LoadFromFile(TestFilePath('images/dogs.jpg'));
 
   PreparedStatement := Connection.PrepareStatement(
     'UPDATE BLOB_VALUES SET B_TEXT =?,B_IMAGE=? WHERE B_ID=?');
@@ -414,13 +414,13 @@ end;
 }
 procedure TZTestDbcInterbaseCase.TestDefaultValues;
 const
-  D_ID = {$IFDEF GENERIC_INDEX}0{$ELSE}1{$ENDIF};
-  D_FLD1 = {$IFDEF GENERIC_INDEX}1{$ELSE}2{$ENDIF};
-  D_FLD2 = {$IFDEF GENERIC_INDEX}2{$ELSE}3{$ENDIF};
-  D_FLD3 = {$IFDEF GENERIC_INDEX}3{$ELSE}4{$ENDIF};
-  D_FLD4 = {$IFDEF GENERIC_INDEX}4{$ELSE}5{$ENDIF};
-  D_FLD5 = {$IFDEF GENERIC_INDEX}5{$ELSE}6{$ENDIF};
-  D_FLD6 = {$IFDEF GENERIC_INDEX}6{$ELSE}7{$ENDIF};
+  D_ID = FirstDbcIndex;
+  D_FLD1 = FirstDbcIndex +1;
+  D_FLD2 = FirstDbcIndex +2;
+  D_FLD3 = FirstDbcIndex +3;
+  D_FLD4 = FirstDbcIndex +4;
+  D_FLD5 = FirstDbcIndex +5;
+  D_FLD6 = FirstDbcIndex +6;
 var
   Statement: IZStatement;
   ResultSet: IZResultSet;
@@ -507,8 +507,6 @@ end;
   Runs a test for Interbase stored procedures.
 }
 procedure TZTestDbcInterbaseCase.TestStoredprocedures;
-const
-  ParamIndex = {$IFDEF GENERIC_INDEX}0{$ELSE}1{$ENDIF};
 var
   ResultSet: IZResultSet;
   CallableStatement: IZCallableStatement;
@@ -520,12 +518,12 @@ begin
   CallableStatement := Connection.PrepareCallWithParams(
     'PROCEDURE1', nil);
   with CallableStatement do begin
-    SetInt(ParamIndex, 12345);
+    SetInt(FirstDbcIndex, 12345);
     ResultSet := ExecuteQueryPrepared;
     with ResultSet do begin
       CheckEquals(True, Next);
       CheckEquals(True, (IsFirst() and IsLast()));
-      CheckEquals(12346, GetInt(ParamIndex));
+      CheckEquals(12346, GetInt(FirstDbcIndex));
     end;
   end;
   CallableStatement.Close;
@@ -535,13 +533,13 @@ begin
   ResultSet := CallableStatement.ExecuteQueryPrepared;
   with ResultSet do begin
     CheckEquals(True, Next);
-    CheckEquals('Computer', GetString(ParamIndex));
+    CheckEquals('Computer', GetString(FirstDbcIndex));
     CheckEquals(True, Next);
-    CheckEquals('Laboratoy', GetString(ParamIndex));
+    CheckEquals('Laboratoy', GetString(FirstDbcIndex));
     CheckEquals(True, Next);
-    CheckEquals('Radiostation', GetString(ParamIndex));
+    CheckEquals('Radiostation', GetString(FirstDbcIndex));
     CheckEquals(True, Next);
-    CheckEquals('Volvo', GetString(ParamIndex));
+    CheckEquals('Volvo', GetString(FirstDbcIndex));
     Close;
   end;
   CallableStatement.Close;

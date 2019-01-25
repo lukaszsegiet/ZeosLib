@@ -55,6 +55,8 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL}
+
 uses {$IFDEF OLDFPC}ZClasses, {$ENDIF}ZCompatibility, ZPlainDriver;
 
 const
@@ -353,9 +355,9 @@ type
   NOTE: in Postgres 6.4 and later, the be_pid is the notifying backend's,
   whereas in earlier versions it was always your own backend's PID.
 }
-  TZPostgreSQLNotify = packed record
+  TZPostgreSQLNotify = {packed }record //the reocord is NOT packet
     relname: PAnsiChar;   { name of relation containing data }
-    be_pid:  NativeInt; { process id of backend }
+    be_pid:  Integer; { process id of backend }
     payload: PAnsiChar; {additional data in notify}
   end;
 
@@ -1113,8 +1115,9 @@ type
     function GetDescription: string; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_POSTGRESQL}
 implementation
-
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL}
 uses SysUtils, ZPlainLoader, Classes, ZEncoding
   {$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
 
@@ -1998,7 +2001,5 @@ function TZPostgreSQL9PlainDriver.GetStandardConformingStrings: Boolean;
 begin
   Result := True;
 end;
-
+{$ENDIF ZEOS_DISABLE_POSTGRESQL}
 end.
-
-

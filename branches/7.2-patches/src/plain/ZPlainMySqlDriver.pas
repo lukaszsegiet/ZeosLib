@@ -60,6 +60,8 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL}
+
 uses Classes, {$IFDEF MSEgui}mclasses,{$ENDIF}
   ZPlainDriver, ZCompatibility, ZPlainMySqlConstants;
 
@@ -1074,7 +1076,9 @@ end;
 
 function TZMySQLPlainDriver.RetrieveNextRowset(mysql: PMYSQL): Integer;
 begin
-  Result := mysql_next_result (mysql);
+  if Assigned(mysql_next_result)
+  then Result := mysql_next_result (mysql)
+  else Result := -1;
 end;
 
 function TZMySQLPlainDriver.Rollback (mysql: PMYSQL): Boolean;
@@ -1413,7 +1417,7 @@ begin
     FLoader.AddLocation(LINUX_DLL51_LOCATION);
     FLoader.AddLocation(LINUX_DLL55_LOCATION);
     FLoader.AddLocation(LINUX_DLL56_LOCATION);
-    FLoader.AddLocation(LINUX_DLL56_LOCATION);
+    FLoader.AddLocation(LINUX_DLL57_LOCATION);
   {$ENDIF}
 end;
 
@@ -1510,7 +1514,7 @@ function TZMariaDB10PlainDriver.GetDescription: string;
 begin
   Result := 'Native Plain Driver for MariaDB-10';
 end;
-
+{$ENDIF ZEOS_DISABLE_MYSQL}
 end.
 
 

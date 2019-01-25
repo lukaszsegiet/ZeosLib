@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZCompatibility, ZClasses, ZSysUtils, ZCollections, ZDbcIntfs, ZDbcStatement,
   ZDbcDbLib, ZPlainDbLibConstants, ZPlainDbLibDriver;
@@ -108,7 +109,7 @@ type
     procedure SetInParamCount(NewParamCount: Integer); override;
   public
     constructor Create(const Connection: IZConnection; const ProcName: string; Info: TStrings);
-    procedure Close; override;
+    procedure BeforeClose; override;
 
     procedure RegisterOutParameter(ParameterIndex: Integer;
       SqlType: Integer); override;
@@ -116,10 +117,11 @@ type
     function ExecuteQueryPrepared: IZResultSet; override;
     function ExecuteUpdatePrepared: Integer; override;
     function ExecutePrepared: Boolean; override;
-
   end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
 uses
   Types, Math,
@@ -444,10 +446,10 @@ begin
     Self.FUserEncoding := ceDefault;
 end;
 
-procedure TZDBLibCallableStatement.Close;
+procedure TZDBLibCallableStatement.BeforeClose;
 begin
   FRetrievedResultSet := nil;
-  inherited Close;
+  inherited BeforeClose;
 end;
 
 procedure TZDBLibCallableStatement.FetchResults;
@@ -828,7 +830,7 @@ begin
             PSmallInt(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
         tdsInt4:
           SoftVarManager.SetAsInteger(Temp,
-            PLongInt(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
+            PInteger(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
         tdsInt8:
           SoftVarManager.SetAsInteger(Temp,
             PInt64(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
@@ -915,6 +917,5 @@ begin
     SetOutParamCount(NewParamCount);
 end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.
-
-

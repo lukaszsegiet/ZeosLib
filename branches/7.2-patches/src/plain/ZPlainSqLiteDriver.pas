@@ -55,6 +55,8 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE}
+
 uses SysUtils, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF}
   {$IFDEF OLDFPC}ZClasses,{$ENDIF} ZCompatibility, ZPlainDriver;
 
@@ -189,7 +191,8 @@ type
   IZSQLitePlainDriver = interface (IZPlainDriver)
     ['{B931C952-3076-4ECB-9630-D900E8DB9869}']
 
-    function Open(const filename: PAnsiChar): Psqlite;
+    function CompiledWith_SQLITE_ENABLE_COLUMN_METADATA: Boolean;
+    function Open(const filename: PAnsiChar; var Handle: Psqlite): Integer;
     function Close(db: Psqlite): Integer;
     function Execute(db: Psqlite; const sql: PAnsiChar;
       sqlite_callback: Tsqlite_callback; arg: Pointer;
@@ -358,6 +361,7 @@ type
 
     sqlite3_finalize: function(pStmt: Psqlite3_stmt): Integer; cdecl;
     sqlite3_reset: function(pStmt: Psqlite3_stmt): Integer; cdecl;
+    sqlite3_enable_load_extension: function(db: Psqlite; OnOff: Integer): Integer; cdecl;
 
     sqlite3_column_blob: function(Stmt: Psqlite3_stmt; iCol:integer): Pointer; cdecl;
     sqlite3_column_bytes: function(Stmt: Psqlite3_stmt; iCol: Integer): integer; cdecl;
@@ -406,7 +410,8 @@ type
   public
     constructor Create;
 
-    function Open(const filename: PAnsiChar): Psqlite;
+    function CompiledWith_SQLITE_ENABLE_COLUMN_METADATA: Boolean;
+    function Open(const filename: PAnsiChar; var Handle: Psqlite): Integer;
     function Close(db: Psqlite): Integer;
     function Execute(db: Psqlite; const sql: PAnsiChar;
       sqlite_callback: Tsqlite_callback; arg: Pointer;
@@ -516,7 +521,11 @@ type
     function GetDescription: string; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE}
+
 implementation
+
+{$IFNDEF ZEOS_DISABLE_SQLITE}
 
 uses ZPlainLoader, ZEncoding{$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
 
@@ -584,6 +593,11 @@ function TZSQLiteBaseDriver.CommitHook(db: Psqlite;
   callback: Tsqlite_simple_callback; ptr: Pointer): Pointer;
 begin
   Result := sqlite3_commit_hook(db, callback, ptr);
+end;
+
+function TZSQLiteBaseDriver.CompiledWith_SQLITE_ENABLE_COLUMN_METADATA: Boolean;
+begin
+  Result := Assigned(sqlite3_column_name) and Assigned(sqlite3_column_table_name);
 end;
 
 function TZSQLiteBaseDriver.Complete(const sql: PAnsiChar): Integer;
@@ -687,14 +701,14 @@ begin
   Result := sqlite3_libversion;
 end;
 
-function TZSQLiteBaseDriver.Open(const filename: PAnsiChar): Psqlite;
+function TZSQLiteBaseDriver.Open(const filename: PAnsiChar; var Handle: Psqlite): Integer;
 {$IFNDEF UNICODE}
 var
   Version: string;
   FileNameString: String;
 {$ENDIF}
 begin
-  Result:= nil;
+  Handle := nil;
   (*Note to Windows users: The encoding used for the filename argument of
     sqlite3_open() and sqlite3_open_v2() must be UTF-8, not whatever codepage
     is currently defined. Filenames containing international characters must
@@ -702,18 +716,18 @@ begin
     sqlite3_open_v2(). *)
 
 {$IFDEF UNICODE}
-  sqlite3_open(filename, Result);
+  Result := sqlite3_open(filename, Handle);
 {$ELSE}
   Version := LibVersion;
   FileNameString := filename;
   if (Version > '3.2.5') then
     {$IFDEF FPC}
-      sqlite3_open(PAnsiChar(FileNameString), Result)
+      Result := sqlite3_open(PAnsiChar(FileNameString), Handle)
     {$ELSE}
-      sqlite3_open(PAnsiChar(AnsiToUTF8(FileNameString)), Result)
+      Result := sqlite3_open(PAnsiChar(AnsiToUTF8(FileNameString)), Handle)
     {$ENDIF}
   else
-    sqlite3_open(filename, Result);
+    Result := sqlite3_open(filename, Handle);
 {$ENDIF}
 end;
 
@@ -1061,6 +1075,7 @@ begin
 
   @sqlite3_finalize               := GetAddress('sqlite3_finalize');
   @sqlite3_reset                  := GetAddress('sqlite3_reset');
+  @sqlite3_enable_load_extension  := GetAddress('sqlite3_enable_load_extension');
 
   @sqlite3_exec                   := GetAddress('sqlite3_exec');
   @sqlite3_last_insert_rowid      := GetAddress('sqlite3_last_insert_rowid');
@@ -1114,6 +1129,8 @@ function TZSQLite3PlainDriver.GetDescription: string;
 begin
   Result := 'Native Plain Driver for SQLite 3';
 end;
+
+{$ENDIF ZEOS_DISABLE_SQLITE}
 
 end.
 

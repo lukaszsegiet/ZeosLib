@@ -55,6 +55,11 @@ interface
 
 {$I ZDbc.inc}
 
+{$IF not defined(MSWINDOWS) and not defined(ZEOS_DISABLE_ADO)}
+  {$DEFINE ZEOS_DISABLE_ADO}
+{$IFEND}
+
+{$IFNDEF ZEOS_DISABLE_ADO}
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcConnection, ZDbcIntfs, ZCompatibility, ZPlainAdoDriver,
@@ -109,8 +114,6 @@ type
     procedure Open; override;
     procedure InternalClose; override;
 
-    procedure SetReadOnly(ReadOnly: Boolean); override;
-
     procedure SetCatalog(const Catalog: string); override;
     function GetCatalog: string; override;
 
@@ -121,7 +124,9 @@ var
   {** The common driver manager object. }
   AdoDriver: IZDriver;
 
+{$ENDIF ZEOS_DISABLE_ADO}
 implementation
+{$IFNDEF ZEOS_DISABLE_ADO}
 
 uses
   Variants, ActiveX, ZOleDB,
@@ -132,7 +137,7 @@ uses
 const                                                //adXactUnspecified
   IL: array[TZTransactIsolationLevel] of TOleEnum = (adXactChaos, adXactReadUncommitted, adXactReadCommitted, adXactRepeatableRead, adXactSerializable);
 
-{ TZDBLibDriver }
+{ TZAdoDriver }
 
 {**
   Constructs this object with default properties.
@@ -174,7 +179,7 @@ begin
   Result := TZAdoSQLTokenizer.Create; { thread save! Allways return a new Tokenizer! }
 end;
 
-threadvar
+var //eh: was threadvar but this defintely does not work! we just need !one! value
   AdoCoInitialized: integer;
 
 procedure CoInit;
@@ -580,21 +585,6 @@ begin
 end;
 
 {**
-  Puts this connection in read-only mode as a hint to enable
-  database optimizations.
-
-  <P><B>Note:</B> This method cannot be called while in the
-  middle of a transaction.
-
-  @param readOnly true enables read-only mode; false disables
-    read-only mode.
-}
-procedure TZAdoConnection.SetReadOnly(ReadOnly: Boolean);
-begin
-  inherited;
-end;
-
-{**
   Sets a catalog name in order to select
   a subspace of this Connection's database in which to work.
   If the driver does not support catalogs, it will
@@ -643,4 +633,5 @@ finalization
   if Assigned(DriverManager) then
     DriverManager.DeregisterDriver(AdoDriver);
   AdoDriver := nil;
+{$ENDIF ZEOS_DISABLE_ADO}
 end.

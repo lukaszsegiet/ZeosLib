@@ -354,9 +354,9 @@ begin
       BracketCount := 0;
       repeat
         Elements.Add(Tokens[TokenIndex]^);
-        if Tokens.AsString(TokenIndex) = '(' then
+        if (Tokens[i].P^ = '(') and (Tokens[i].L = 1) then
           Inc(BracketCount)
-        else if Tokens.AsString(TokenIndex) = ')' then
+        else if (Tokens[i].P^ = ')') and (Tokens[i].L = 1) then
           Dec(BracketCount);
         Inc(TokenIndex);
       until (BracketCount <= 0) or (TokenIndex >= Tokens.Count);
@@ -637,8 +637,7 @@ begin
       SkipOptionTokens(FromTokens, TokenIndex, FromJoins);
       Continue;
     { Skips from clause keywords. }
-    end else if FromClauses.IndexOf(CurrentUpper) >= 0 then
-    begin
+    end else if FromClauses.IndexOf(CurrentUpper) >= 0 then begin
       Inc(TokenIndex);
       CurrentValue := FromTokens.AsString(TokenIndex);
       CurrentUpper := AnsiUpperCase(CurrentValue);
@@ -651,7 +650,7 @@ begin
         if TokenIndex < FromTokens.Count then begin
           CurrentValue := FromTokens.AsString(TokenIndex);
           CurrentUpper := AnsiUpperCase(CurrentValue);
-          CurrentType := FromTokens[TokenIndex]^.TokenType;
+          //CurrentType := FromTokens[TokenIndex]^.TokenType;
         end;
       end;
       // We must jump 1 tokens back now when we stopped on a Join clause.

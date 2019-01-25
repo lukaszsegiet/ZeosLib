@@ -91,7 +91,7 @@ type
   // Protocol type is determined by StartsWith(Protocol, ProtocolPrefixes[drv]),
   // so one prefix means exactly one protocol type!
   TProtocolType = (protUnknown, protMySQL, protPostgre, protSQLite, protFirebird, protInterbase,
-    protOracle, protASA, protFreeTDS, protMSSQL, protOleDB, protADO, protSyBase,
+    protOracle, protASA, protFreeTDS, protMSSQL, protOleDB, protADO, protSybase,
     protODBC);
 
 const
@@ -701,7 +701,9 @@ end;
 
 function TZAbstractSQLTestCase.GetLibLocation: string;
 begin
-  Result := FCurrentConnectionConfig.LibLocation;
+  if FCurrentConnectionConfig.LibLocation = ''
+  then Result := FCurrentConnectionConfig.LibLocation
+  else Result := TestConfig.PathFromRoot(FCurrentConnectionConfig.LibLocation);
 end;
 
 function TZAbstractSQLTestCase.GetAlias: string;
@@ -721,7 +723,15 @@ end;
 
 function TZAbstractSQLTestCase.GetDatabase: string;
 begin
-  Result := FCurrentConnectionConfig.Database;
+  // Database could be defined as alias, absolute path or relative path
+  // Consider it a path if a PathDelim is encountered
+{ EH@Fr0sT:
+  Driver=SQL Server Native Client 11.0;Initial Catalog=zeoslib;Data Source=EGONDEVLAPTOPW7\SQLEXPRESS;Workstation ID=EGONDEVLAPTOPW7
+  is also a valid database name... so this code wrongly adds path data..
+  if Pos(PathDelim, FCurrentConnectionConfig.Database) > 0 then
+    Result := TestConfig.PathFromRoot(FCurrentConnectionConfig.Database)
+  else}
+    Result := FCurrentConnectionConfig.Database;
 end;
 
 function TZAbstractSQLTestCase.GetDropScripts: TStringDynArray;

@@ -55,8 +55,10 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils, Types,
+  {$IF defined(UNICODE) and not defined(WITH_UNICODEFROMLOCALECHARS)}Windows,{$IFEND}
   ZClasses, ZDbcIntfs, ZDbcStatement, ZDbcMySql, ZVariant, ZPlainMySqlDriver,
   ZPlainMySqlConstants, ZCompatibility, ZDbcLogging, ZDbcUtils;
 
@@ -214,7 +216,9 @@ type
     function GetMoreResults: Boolean; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 
 uses
   Math, DateUtils, ZFastCode, ZDbcMySqlUtils, ZDbcMySqlResultSet, ZDbcProperties,
@@ -508,7 +512,7 @@ end;
 function TZAbstractMySQLPreparedStatement.CreateResultSet(const SQL: string): IZResultSet;
 var
   CachedResolver: TZMySQLCachedResolver;
-  NativeResultSet: TZAbstractResultSet;
+  NativeResultSet: TZAbstractMySQLResultSet;
   CachedResultSet: TZCachedResultSet;
 begin
   FLastWasOutParams := IsOutParamResult;
@@ -990,7 +994,7 @@ var
   Len: NativeUInt;
   I: Integer;
   bind: PMYSQL_aligned_BIND;
-  OffSet, PieceSize: LongWord;
+  OffSet, PieceSize: Cardinal;
   array_size: UInt;
 begin
   if not FEmulatedParams and FBindAgain and (BindList.Count > 0) and (FMYSQL_STMT <> nil) then begin
@@ -1085,8 +1089,8 @@ begin
         else Result := IntToRaw(PWord(Bind^.buffer_address^)^);
       FIELD_TYPE_LONG:
         if Bind^.is_unsigned_address^ = 0
-        then Result := IntToRaw(PLongInt(Bind^.buffer_address^)^)
-        else Result := IntToRaw(PLongWord(Bind^.buffer_address^)^);
+        then Result := IntToRaw(PInteger(Bind^.buffer_address^)^)
+        else Result := IntToRaw(PCardinal(Bind^.buffer_address^)^);
       FIELD_TYPE_FLOAT:
         Result := FloatToSQLRaw(PSingle(Bind^.buffer_address^)^);
       FIELD_TYPE_DOUBLE:
@@ -1256,11 +1260,12 @@ begin
   if FLastWasOutParams and Assigned(LastResultSet) then
     LastResultSet.Close;
   if (FEmulatedParams or not FStmtHandleIsExecuted) and (FPMYSQL^ <> nil) then
-    while true do begin
+    //old lib's do not have mysql_next_result method
+    while Assigned(FPlainDriver.mysql_next_result) do begin
       Status := FPlainDriver.mysql_next_result(FPMYSQL^);
       if Status = -1 then
         Break
-      else if (Status = 0) {and (FPlainDriver.mysql_field_count(FPMYSQL) > 0)} then begin
+      else if (Status = 0) then begin
         FQueryHandle := FPlainDriver.mysql_store_result(FPMYSQL^);
         if FQueryHandle <> nil then begin
           FPlainDriver.mysql_free_result(FQueryHandle);
@@ -1278,11 +1283,13 @@ begin
         checkMySQLError(FPlainDriver, FPMYSQL^, FMYSQL_STMT, lcExecPrepStmt,
           ConvertZMsgToRaw(SPreparedStmtExecFailure, ZMessages.cCodePage,
             ConSettings^.ClientCodePage^.CP), Self);
-    end else *)while true do begin //so we need to do the job by hand now
+    end else *)
+       //old lib's do not have mysql_stmt_next_result method
+      while Assigned(FPlainDriver.mysql_stmt_next_result) do begin //so we need to do the job by hand now
       Status := FPlainDriver.mysql_stmt_next_result(FMYSQL_STMT);
       if Status = -1 then
         Break
-      else if (Status = 0) {and (FPlainDriver.mysql_stmt_field_count(FMYSQL_STMT) > 0)} then begin
+      else if (Status = 0) then begin
         //horray we can't store the result -> https://dev.mysql.com/doc/refman/5.7/en/mysql-stmt-store-result.html
         if FPlainDriver.mysql_stmt_free_result(FMYSQL_STMT) <> 0 then //MySQL allows this Mariadb is viny nilly now
           checkMySQLError(FPlainDriver, FPMYSQL^, FMYSQL_STMT, lcExecPrepStmt,
@@ -1569,8 +1576,8 @@ begin
                             then PSmallInt(Bind^.buffer)^ := SmallInt(Value)
                             else PWord(Bind^.buffer)^ := Word(Value);
       FIELD_TYPE_LONG:      if Bind^.is_unsigned_address^ = 0
-                            then PLongInt(Bind^.buffer)^ := LongInt(Value)
-                            else PLongWord(Bind^.buffer)^ := LongWord(Value);
+                            then PInteger(Bind^.buffer)^ := Integer(Value)
+                            else PCardinal(Bind^.buffer)^ := Cardinal(Value);
       FIELD_TYPE_LONGLONG:  if Bind^.is_unsigned_address^ = 0
                             then PInt64(Bind^.buffer)^ := Value
       {$IF defined (RangeCheckEnabled) and defined(WITH_UINT64_C1118_ERROR)}{$R-}{$IFEND}
@@ -1611,8 +1618,8 @@ begin
                             then PSmallInt(Bind^.buffer)^ := SmallInt(Value)
                             else PWord(Bind^.buffer)^ := Word(Value);
       FIELD_TYPE_LONG:      if Bind^.is_unsigned_address^ = 0
-                            then PLongInt(Bind^.buffer)^ := LongInt(Value)
-                            else PLongWord(Bind^.buffer)^ := LongWord(Value);
+                            then PInteger(Bind^.buffer)^ := Integer(Value)
+                            else PCardinal(Bind^.buffer)^ := Cardinal(Value);
       FIELD_TYPE_LONGLONG:  if Bind^.is_unsigned_address^ = 0
                             then PInt64(Bind^.buffer)^ := Value
                             else PUInt64(Bind^.buffer)^ := Value;
@@ -1669,35 +1676,22 @@ end;
 
 procedure TZAbstractMySQLPreparedStatement.InternalSetInParamCount(NewParamCount: Integer);
 var I: Integer;
-  V: TZVariant;
-  SQLType: TZSQLType;
 begin
   if not FEmulatedParams then
     if (FMYSQL_BINDs <> nil) and (NewParamCount <> BindList.Count) or ((NewParamCount > 0) and (FMYSQL_aligned_BINDs = nil)) then begin
       ReallocBindBuffer(FMYSQL_BINDs, FMYSQL_aligned_BINDs, FBindOffset,
         BindList.Count*Ord(FMYSQL_aligned_BINDs<>nil), NewParamCount, 1);
-      //init buffers and move data to buffer
-      if NewParamCount > 0 then
-        for i := 0 to BindList.Count -1 do begin
-          if BindList.BindTypes[i] in [zbtNull, zbtLob, zbtArray] then begin
-            if BindList.BindTypes[i] = zbtLob then
-              FChunkedData := True;
-            continue;
-          end;
-          V := BindList.Variants[I];
-          SQLType := BindList.SQLTypes[I];
-          BindList.SetNull(I, stUnknown);
-          case V.VType of
-            vtBoolean:  BindBoolean(I, v.VBoolean);
-            vtBytes:    BindBinary(I, SQLType, Pointer(V.VBytes), Length(V.VBytes));
-            vtInteger:  BindSignedOrdinal(i, SQLType, V.VInteger);
-            vtUInteger: BindUnSignedOrdinal(i, SQLType, V.VUInteger);
-            vtFloat:    BindDouble(i, SQLType, V.VFloat);
-            vtDateTime: BindDatetime(i, SQLType, V.VDateTime);
-            vtRawByteString: BindRawStr(i, V.VRawByteString);
-            vtCharRec:  BindRawStr(i, V.VCharRec.P, V.VCharRec.Len);
-          end;
-        end;
+      if NewParamCount > 0 then begin
+        //init types, buffers and move data to buffer
+        BindList.BindValuesToStatement(Self, True);
+        //releas duplicate data now
+        for i := 0 to BindList.Count -1 do
+          if BindList[i].BindType <> zbtLob then
+            BindList.SetNull(I, stUnknown)
+          {$R-}
+          else InitBuffer(BindList[i].SQLType, i, @FMYSQL_aligned_BINDs[I]);
+          {$IFDEF RangeCheckEnabled}{$R+}{$ENDIF}
+      end;
     end;
 end;
 
@@ -2621,4 +2615,5 @@ MySQL568PreparableTokens[29].MatchingGroup := 'UNINSTALL';
   SetLength(MySQL568PreparableTokens[29].ChildMatches, 1);
   MySQL568PreparableTokens[29].ChildMatches[0] := 'PLUGIN'; *)
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 end.

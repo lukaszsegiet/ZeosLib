@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_ASA}
 uses Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcIntfs, ZDbcStatement, ZDbcASA, ZDbcASAUtils, ZPlainASADriver,
   ZCompatibility, ZDbcLogging, ZVariant;
@@ -84,7 +85,7 @@ type
     procedure Prepare; override;
     procedure Unprepare; override;
 
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure Cancel; override;
     function GetMoreResults: Boolean; override;
 
@@ -110,7 +111,7 @@ type
     constructor Create(const Connection: IZConnection; const SQL: string; Info: TStrings);
     destructor Destroy; override;
 
-    procedure Close; override;
+    procedure BeforeClose; override;
     procedure Cancel; override;
     function GetMoreResults: Boolean; override;
     function ExecuteQuery(const {%H-}SQL: RawByteString): IZResultSet; override;
@@ -122,7 +123,9 @@ type
     function ExecutePrepared: Boolean; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_ASA}
 implementation
+{$IFNDEF ZEOS_DISABLE_ASA}
 
 uses ZSysUtils, ZDbcUtils, ZMessages, ZPlainASAConstants, ZDbcASAResultSet,
   ZEncoding, ZDbcProperties, ZFastCode;
@@ -249,11 +252,9 @@ begin
   inherited Unprepare;
 end;
 
-procedure TZASAPreparedStatement.Close;
+procedure TZASAPreparedStatement.AfterClose;
 begin
-  inherited Close;
-  if FStmtNum <> 0 then
-  begin
+  if FStmtNum <> 0 then begin
     FPlainDriver.dbpp_dropstmt(FASAConnection.GetDBHandle, nil, nil, @FStmtNum);
     FStmtNum := 0;
   end;
@@ -424,7 +425,7 @@ begin
   inherited;
 end;
 
-procedure TZASACallableStatement.Close;
+procedure TZASACallableStatement.BeforeClose;
 begin
   if not Closed then
   begin
@@ -436,7 +437,7 @@ begin
     FPlainDriver.dbpp_dropstmt(FASAConnection.GetDBHandle, nil, nil, @FStmtNum);
     FStmtNum := 0;
   end;
-  inherited;
+  inherited BeforeClose;
 end;
 
 procedure TZASACallableStatement.Cancel;
@@ -698,6 +699,7 @@ begin
   Result := 'call ' + ConSettings^.ConvFuncs.ZStringToRaw(SQL,
             ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP) + InParams;
 end;
+{$ENDIF ZEOS_DISABLE_ASA}
 
 end.
 

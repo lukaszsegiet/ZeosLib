@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses Classes, SysUtils,
   ZVariant, ZDbcIntfs, ZPlainDBLibDriver, ZCompatibility, ZPlainDbLibConstants;
 
@@ -111,7 +112,9 @@ function PrepareSQLParameter(const Value: TZVariant; ParamType: TZSQLType;
   const ClientVarManager: IZClientVariantManager; ConSettings: PZConSettings;
   NChar: Boolean = False): RawByteString;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
 uses ZSysUtils, ZEncoding, ZDbcUtils, ZClasses, ZFastCode
   {$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
@@ -128,9 +131,9 @@ begin
     1{char}, 12{varchar}, -8{nchar}, -9{nvarchar}: Result := stString;
     -7{bit}: Result := stBoolean;
 //Bug #889223, bug with tinyint on mssql
-//    -6: Result := stByte;
+    -6: Result := stByte;
     -5: Result := stLong;
-    -6: Result := stSmall;
+//    -6: Result := stSmall;
     5: Result := stSmall;
     4: Result := stInteger;
     2, 3, 6, 7, 8: Result := stDouble;
@@ -400,5 +403,5 @@ begin
       Result := 'NULL';
   end;
 end;
-
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.

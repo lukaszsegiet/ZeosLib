@@ -55,6 +55,7 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 {$J+}
 
 uses
@@ -1262,7 +1263,11 @@ type
       u_v_length: Pub4; version: Pub2): sword;  *)
   end;
 
+{$ENDIF ZEOS_DISABLE_ORACLE}
+
 implementation
+
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 
 uses ZEncoding;
 
@@ -1270,7 +1275,7 @@ uses ZEncoding;
 
 function TZOracle9iPlainDriver.GetUnicodeCodePageName: String;
 begin
-  Result := 'UTF8';
+  Result := 'AL32UTF8';
 end;
 
 procedure TZOracle9iPlainDriver.LoadCodePages;
@@ -1559,11 +1564,17 @@ begin
   AddCodePage('ZHT16BIG5', 865, ceAnsi, zCP_Big5);
   AddCodePage('ZHT16MSWIN950', 867, ceAnsi, zCP_Big5);
   AddCodePage('ZHT16HKSCS', 868, ceAnsi);
-  AddCodePage('UTF8', 871, ceUTF8, zCP_UTF8);
-  AddCodePage('AL32UTF8', 873, ceUTF8, zCP_UTF8);
-  AddCodePage('UTF16', 1000, ceUTF16, zCP_UTF16);
-  AddCodePage('AL16UTF16', 2000, ceUTF16, zCP_UTF16);
-  AddCodePage('AL16UTF16LE', 2002, ceUTF16, zCP_UTF16);
+  //2018-09-28 UTF8 removed by marsupilami79. UTF8 is CESU-8 in reality which cannot
+  //be converted by Zeos correctly. For more information see:
+  //https://en.wikipedia.org/wiki/CESU-8
+  //https://community.oracle.com/thread/351482
+  //UTF8 is aliased to AL32UTF8 to mitigate those rare problems.
+  //AddCodePage('UTF8', 871, ceUTF8, zCP_UTF8);
+  AddCodePage('UTF8', 871, ceUTF8, zCP_UTF8, 'AL32UTF8', 4);
+  AddCodePage('AL32UTF8', 873, ceUTF8, zCP_UTF8, '', 4);
+  AddCodePage('UTF16', 1000, ceUTF16, zCP_UTF16, '', 2);
+  AddCodePage('AL16UTF16', 2000, ceUTF16, zCP_UTF16BE, '', 4);
+  AddCodePage('AL16UTF16LE', 2002, ceUTF16, zCP_UTF16, '', 4);
 end;
 
 procedure TZOracle9iPlainDriver.LoadApi;
@@ -4972,6 +4983,7 @@ begin
     type_name, t_n_length, user_version, u_v_length, version);
 end;
 *)
+{$ENDIF ZEOS_DISABLE_ORACLE}
 end.
 
 

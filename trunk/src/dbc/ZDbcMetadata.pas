@@ -538,7 +538,7 @@ const
   ProcedureRemarksIndex    = FirstDbcIndex + 6;
   ProcedureTypeIndex       = FirstDbcIndex + 7;
 type
-  TProcedureMap = packed record
+  TProcedureMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..ProcedureTypeIndex] of ShortInt
   end;
@@ -557,7 +557,7 @@ const
   ProcColNullableIndex      = FirstDbcIndex + 11;
   ProcColRemarksIndex       = FirstDbcIndex + 12;
 type
-  TProcedureColumnsColMap = packed record
+  TProcedureColumnsColMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..ProcColRemarksIndex] of ShortInt;
   end;
@@ -581,7 +581,7 @@ const
   TableColColumnTypeIndex               = FirstDbcIndex + 4;
   TableColColumnTypeNameIndex           = FirstDbcIndex + 5;
   TableColColumnSizeIndex               = FirstDbcIndex + 6;
-  TableColColumnBufLengthIndex          = FirstDbcIndex + 7;
+  TableColColumnBufLengthIndex          = FirstDbcIndex + 7; //unused as documented
   TableColColumnDecimalDigitsIndex      = FirstDbcIndex + 8;
   TableColColumnNumPrecRadixIndex       = FirstDbcIndex + 9;
   TableColColumnNullableIndex           = FirstDbcIndex + 10;
@@ -599,7 +599,7 @@ const
   TableColColumnDefinitelyWritableIndex = FirstDbcIndex + 22;
   TableColColumnReadonlyIndex           = FirstDbcIndex + 23;
 type
-  TTableColColumnMap = packed record
+  TTableColColumnMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..TableColColumnReadonlyIndex] of ShortInt;
   end;
@@ -611,7 +611,7 @@ const
   TableColPrivPrivilegeIndex   = FirstDbcIndex + 6;
   TableColPrivIsGrantableIndex = FirstDbcIndex + 7;
 type
-  TTableColPrivMap = packed record
+  TTableColPrivMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..TableColPrivIsGrantableIndex] of ShortInt;
   end;
@@ -623,7 +623,7 @@ const
   TablePrivPrivilegeIndex   = FirstDbcIndex + 5;
   TablePrivIsGrantableIndex = FirstDbcIndex + 6;
 type
-  TTablePrivMap = packed record
+  TTablePrivMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..TablePrivIsGrantableIndex] of ShortInt;
   end;
@@ -707,7 +707,7 @@ const
   CrossRefKeyColPKNameIndex         = FirstDbcIndex + 12;
   CrossRefKeyColDeferrabilityIndex  = FirstDbcIndex + 13;
 type
-  TCrossRefKeyCol = packed record
+  TCrossRefKeyCol = record
     Initilized: Boolean;
     ColIndices: array[CrossRefKeyColPKTableCatalogIndex..CrossRefKeyColDeferrabilityIndex] of ShortInt;
   end;
@@ -746,7 +746,7 @@ const
   IndexInfoColPagesIndex           = FirstDbcIndex + 11;
   IndexInfoColFilterConditionIndex = FirstDbcIndex + 12;
 type
-  TIndexInfoMap = packed record
+  TIndexInfoMap = record
     Initilized: Boolean;
     ColIndices: array[CatalogNameIndex..IndexInfoColFilterConditionIndex] of ShortInt;
   end;
@@ -2181,25 +2181,38 @@ end;
 }
 function TZAbstractDatabaseMetadata.HasNoWildcards(const Pattern: string): boolean;
 var
-  I: Integer;
   PreviousCharWasEscape: Boolean;
   EscapeChar,PreviousChar: Char;
   WildcardsSet: TZWildcardsSet;
+  P, PEnd: PChar;
+  {$IFDEF TSYSCHARSET_IS_DEPRECATED}
+  function CharInSet(C: Char; const CharSet: TZWildcardsSet): Boolean;
+  var I: Integer;
+  begin
+    Result := False;
+    for I := Low(CharSet) to High(CharSet) do
+      if CharSet[i] = C then begin
+        Result := True;
+        Break;
+      end;
+  end;
+  {$ENDIF}
 begin
   Result := False;
   PreviousChar := #0;
   PreviousCharWasEscape := False;
   EscapeChar := GetDatabaseInfo.GetSearchStringEscape[1];
   WildcardsSet := GetWildcardsSet;
-  for I := 1 to Length(Pattern) do begin
-    if (not PreviousCharWasEscape) and CharInset(Pattern[I], WildcardsSet) then
+  P := Pointer(Pattern);
+  PEnd := P+Length(Pattern);
+  while P<PEnd do begin
+    if (not PreviousCharWasEscape) and CharInset(P^, WildcardsSet) then
      Exit;
-
-    PreviousCharWasEscape := (Pattern[I] = EscapeChar) and (PreviousChar <> EscapeChar);
-    if (PreviousCharWasEscape) and (Pattern[I] = EscapeChar) then
-      PreviousChar := #0
-    else
-      PreviousChar := Pattern[I];
+    PreviousCharWasEscape := (P^ = EscapeChar) and (PreviousChar <> EscapeChar);
+    if (PreviousCharWasEscape) and (P^ = EscapeChar)
+    then PreviousChar := #0
+    else PreviousChar := P^;
+    Inc(P);
   end;
   Result := True;
 end;
@@ -2399,7 +2412,7 @@ begin
   begin
     DestResultSet.MoveToInsertRow;
     for I := FirstDbcIndex to Metadata.GetColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}do
-    begin
+    if not SrcResultSet.IsNull(I) then begin
       case Metadata.GetColumnType(I) of
         stBoolean:
           DestResultSet.UpdateBoolean(I, SrcResultSet.GetBoolean(I));
@@ -2430,9 +2443,9 @@ begin
         stString, stUnicodeString, stAsciiStream, stUnicodeStream:
           if (not ConSettings^.ClientCodePage^.IsStringFieldCPConsistent) or
              (ConSettings^.ClientCodePage^.Encoding = ceUTF16) then
-            DestResultSet.UpdatePWideChar(I, SrcResultSet.GetPWideChar(I, Len), @Len)
+            DestResultSet.UpdatePWideChar(I, SrcResultSet.GetPWideChar(I, Len), Len)
           else
-            DestResultSet.UpdatePAnsiChar(I, SrcResultSet.GetPAnsiChar(I, Len), @Len);
+            DestResultSet.UpdatePAnsiChar(I, SrcResultSet.GetPAnsiChar(I, Len), Len);
         stBytes, stBinaryStream:
           DestResultSet.UpdateBytes(I, SrcResultSet.GetBytes(I));
         stDate:
@@ -5306,7 +5319,6 @@ begin
   Result:= Format('get-tables:%s:%s:%s:%s',
     [Catalog, SchemaPattern, TableNamePattern, Key]);
 end;
-
 
 const
   CharacterSetsColumnsCount = 2;

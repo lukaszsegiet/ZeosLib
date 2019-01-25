@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZCompatibility, ZClasses, ZSysUtils, ZCollections, ZDbcIntfs, ZDbcStatement,
   ZDbcDbLib, ZPlainDbLibConstants, ZPlainDbLibDriver;
@@ -108,7 +109,7 @@ type
     procedure SetInParamCount(const NewParamCount: Integer); override;
   public
     constructor Create(const Connection: IZConnection; const ProcName: string; Info: TStrings);
-    procedure Close; override;
+    procedure BeforeClose; override;
 
     procedure RegisterOutParameter(ParameterIndex: Integer;
       SqlType: Integer); override;
@@ -116,10 +117,11 @@ type
     function ExecuteQueryPrepared: IZResultSet; override;
     function ExecuteUpdatePrepared: Integer; override;
     function ExecutePrepared: Boolean; override;
-
   end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
 uses
   Types, Math,
@@ -196,11 +198,21 @@ end;
 
 function TZDBLibPreparedStatementEmulated.GetParamAsString(
   ParamIndex: Integer): RawByteString;
+var
+  Connection: IZDBLibConnection;
+  Len: Integer;
 begin
+  // Todo: Talk with EgonHugeist wether this requiresmodifications for his Mextgen effort
   if InParamCount <= ParamIndex
   then Result := 'NULL'
   else Result := PrepareSQLParameter(InParamValues[ParamIndex],
       InParamTypes[ParamIndex], ClientVarManager, ConSettings, IsNCharIndex[ParamIndex]);
+  Len := Length(Result);
+  if (Len > 0) and (Result[1] = '''') and (Result[Len] = '''') then begin
+    Connection := GetConnection as IZDBLibConnection;
+    if (Connection.GetProvider = dpMsSQL) and Connection.FreeTDS then
+      Result := 'N' + Result;
+  end;
 end;
 
 {**
@@ -251,8 +263,10 @@ begin
 
   FHandle := FDBLibConnection.GetConnectionHandle;
   FPlainDriver := FDBLibConnection.GetPlainDriver;
-  if FPlainDriver.dbcancel(FHandle) <> DBSUCCEED then
-    FDBLibConnection.CheckDBLibError(lcExecute, SQL);
+  //2018-09-16 Coomented by marsupilami79 because this hides errors in the logic
+  //result sets might get only partial data without an error
+  //if FPlainDriver.dbcancel(FHandle) <> DBSUCCEED then
+  //  FDBLibConnection.CheckDBLibError(lcExecute, SQL);
 
   if FPlainDriver.dbcmd(FHandle, Pointer(Ansi)) <> DBSUCCEED then
     FDBLibConnection.CheckDBLibError(lcExecute, SQL);
@@ -432,10 +446,10 @@ begin
     Self.FUserEncoding := ceDefault;
 end;
 
-procedure TZDBLibCallableStatement.Close;
+procedure TZDBLibCallableStatement.BeforeClose;
 begin
   FRetrievedResultSet := nil;
-  inherited Close;
+  inherited BeforeClose;
 end;
 
 procedure TZDBLibCallableStatement.FetchResults;
@@ -816,7 +830,7 @@ begin
             PSmallInt(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
         tdsInt4:
           SoftVarManager.SetAsInteger(Temp,
-            PLongInt(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
+            PInteger(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
         tdsInt8:
           SoftVarManager.SetAsInteger(Temp,
             PInt64(FPLainDriver.dbRetData(FHandle, ParamIndex))^);
@@ -903,6 +917,5 @@ begin
     SetOutParamCount(NewParamCount);
 end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.
-
-

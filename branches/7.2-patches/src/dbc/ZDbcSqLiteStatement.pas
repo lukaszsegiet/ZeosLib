@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcIntfs, ZDbcStatement, ZPlainSqLiteDriver, ZCompatibility, ZDbcLogging,
@@ -93,7 +94,7 @@ type
 
     procedure Prepare; override;
     procedure Unprepare; override;
-    procedure Close; override;
+
     procedure Cancel; override;
 
     function ExecuteQueryPrepared: IZResultSet; override;
@@ -103,7 +104,9 @@ type
   TZSQLiteStatement = class(TZSQLiteCAPIPreparedStatement);
 
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses
   {$IFDEF WITH_UNITANSISTRINGS} AnsiStrings,{$ENDIF} ZDbcSqLiteUtils,
@@ -316,12 +319,17 @@ begin
 end;
 
 procedure TZSQLiteCAPIPreparedStatement.Unprepare;
+var ErrorCode: Integer;
 begin
   { EH: do not change this sequence!: first close possbile opened resultset}
   inherited UnPrepare;
-  CheckSQLiteError(FPlainDriver, FHandle, FPlainDriver.Finalize(FStmtHandle),
-    lcUnprepStmt, 'Unprepare SQLite Statement', ConSettings, FExtendedErrorMessage);
-  FStmtHandle := nil; //Keep track we do not try to finalize the handle again on destroy or so
+  if Assigned(FStmtHandle) then begin
+    ErrorCode := FPlainDriver.finalize(FStmtHandle);
+    FStmtHandle := nil; //Keep track we do not try to finalize the handle again on destroy or so
+    if ErrorCode <> SQLITE_OK then
+      CheckSQLiteError(FPlainDriver, FHandle, ErrorCode,
+        lcUnprepStmt, 'sqlite3_finalize', ConSettings, FExtendedErrorMessage);
+  end;
 end;
 
 {**
@@ -333,27 +341,6 @@ end;
 procedure TZSQLiteCAPIPreparedStatement.Cancel;
 begin
   FPlainDriver.Interrupt(FHandle);
-end;
-
-{**
-  Releases this <code>Statement</code> object's database
-  and JDBC resources immediately instead of waiting for
-  this to happen when it is automatically closed.
-  It is generally good practice to release resources as soon as
-  you are finished with them to avoid tying up database
-  resources.
-  <P><B>Note:</B> A <code>Statement</code> object is automatically closed when it is
-  garbage collected. When a <code>Statement</code> object is closed, its current
-  <code>ResultSet</code> object, if one exists, is also closed.
-}
-procedure TZSQLiteCAPIPreparedStatement.Close;
-begin
-  inherited Close; //first close LastResultSet before finalize. Otherwise -> Library routine called out of sequence.
-  { we need this here too: TZTestDbcSQLiteCase.TestResultSet would raise an Error on Connection.Close if Stmt isn't freed!}
-  if Assigned(FStmtHandle) then
-    CheckSQLiteError(FPlainDriver, FHandle, FPlainDriver.Finalize(FStmtHandle),
-      lcUnprepStmt, 'Unprepare SQLite Statement', ConSettings, FExtendedErrorMessage);
-  FStmtHandle := nil; //Keep track we do not try to finalize the handle again on destroy or so
 end;
 
 {**
@@ -449,5 +436,6 @@ begin
   inherited ExecutePrepared;
 end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 end.
 

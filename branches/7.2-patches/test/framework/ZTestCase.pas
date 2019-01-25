@@ -112,6 +112,8 @@ type
     function SkipForReason(Reasons: ZSkipReasons): Boolean; overload; virtual;
     function SkipForReason(Reason: ZSkipReason): Boolean; overload;
 
+    function TestFilePath(const RelFilePath: string): string;
+
     { Test configuration methods. }
     procedure LoadConfiguration; virtual;
 
@@ -200,6 +202,9 @@ uses
 {$ENDIF}
 {$IFDEF WITH_STRLEN_DEPRECATED}
   AnsiStrings,
+{$ENDIF}
+{$IFDEF WITH_INLINE}
+  ZFastCode,
 {$ENDIF}
   ZSysUtils, ZTestConfig, ZEncoding;
 
@@ -359,6 +364,14 @@ end;
 destructor TZAbstractTestCase.Destroy;
 begin
   inherited Destroy;
+end;
+
+{**
+  Returns absolute path to a test file located in DEFAULT_CONFIG_DIR
+}
+function TZAbstractTestCase.TestFilePath(const RelFilePath: string): string;
+begin
+  Result := TestConfig.PathFromConfig(RelFilePath);
 end;
 
 {**
@@ -698,13 +711,13 @@ begin
   DecodeTime(Expected, EHour, EMin, ESec, EMSec);
   DecodeDate(Actual, AYear, AMonth, ADay);
   DecodeTime(Actual, AHour, AMin, ASec, AMSec);
-  if dpYear in Parts then CheckEquals(EYear, AYear, s);
-  if dpMonth in Parts then CheckEquals(EMonth, AMonth, s);
-  if dpDay in Parts then CheckEquals(EDay, ADay, s);
-  if dpHour in Parts then CheckEquals(EHour, AHour, s);
-  if dpMin in Parts then CheckEquals(EMin, AMin, s);
-  if dpSec in Parts then CheckEquals(ESec, ASec, s);
-  if dpMSec in Parts then CheckEquals(EMSec, AMSec, s);
+  if dpYear in Parts then CheckEquals(Cardinal(EYear), Cardinal(AYear), s);
+  if dpMonth in Parts then CheckEquals(Cardinal(EMonth), Cardinal(AMonth), s);
+  if dpDay in Parts then CheckEquals(Cardinal(EDay), Cardinal(ADay), s);
+  if dpHour in Parts then CheckEquals(Cardinal(EHour), Cardinal(AHour), s);
+  if dpMin in Parts then CheckEquals(Cardinal(EMin), Cardinal(AMin), s);
+  if dpSec in Parts then CheckEquals(Cardinal(ESec), Cardinal(ASec), s);
+  if dpMSec in Parts then CheckEquals(Cardinal(EMSec), Cardinal(AMSec), s);
 end;
 
 {**

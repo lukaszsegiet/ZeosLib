@@ -55,8 +55,13 @@ interface
 
 {$I ZDbc.inc}
 
+{$IF not defined(MSWINDOWS) and not defined(ZEOS_DISABLE_ADO)}
+  {$DEFINE ZEOS_DISABLE_ADO}
+{$IFEND}
+
+{$IFNDEF ZEOS_DISABLE_ADO}
 uses
-  {$IFDEF WITH_TOBJECTLIST_INLINE}System.Types, System.Contnrs{$ELSE}Types{$ENDIF},
+  {$IFDEF WITH_TOBJECTLIST_REQUIRES_SYSTEM_TYPES}System.Types, System.Contnrs{$ELSE}Types{$ENDIF},
   Windows, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZSysUtils, ZDbcIntfs, ZDbcGenericResolver,
   ZDbcCachedResultSet, ZDbcCache, ZDbcResultSet, ZDbcResultsetMetadata, ZCompatibility, ZPlainAdo;
@@ -80,7 +85,7 @@ type
   public
     constructor Create(const Statement: IZStatement; const SQL: string;
       const AdoRecordSet: ZPlainAdo.RecordSet);
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure ResetCursor; override;
     function Next: Boolean; override;
     function MoveAbsolute(Row: Integer): Boolean; override;
@@ -121,7 +126,9 @@ type
       OldRowAccessor, NewRowAccessor: TZRowAccessor); override;
   end;
 
+{$ENDIF ZEOS_DISABLE_ADO}
 implementation
+{$IFNDEF ZEOS_DISABLE_ADO}
 
 uses
   Variants, {$IFDEF FPC}ZOleDB{$ELSE}OleDB{$ENDIF},
@@ -259,10 +266,10 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZAdoResultSet.Close;
+procedure TZAdoResultSet.AfterClose;
 begin
   FAdoRecordSet := nil;
-  inherited Close;
+  inherited AfterClose;
 end;
 
 procedure TZAdoResultSet.ResetCursor;
@@ -1740,5 +1747,5 @@ begin
   ColumnInfo.Writable := False;
   ColumnInfo.DefinitelyWritable := False;}
 end;
-
+{$ENDIF ZEOS_DISABLE_ADO}
 end.

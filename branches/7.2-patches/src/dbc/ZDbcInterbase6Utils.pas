@@ -54,8 +54,10 @@ unit ZDbcInterbase6Utils;
 interface
 
 {$I ZDbc.inc}
+{$IFNDEF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 uses
   SysUtils, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} Types,
+  {$IF defined(UNICODE) and not defined(WITH_UNICODEFROMLOCALECHARS)}Windows,{$IFEND}
   ZDbcIntfs, ZDbcStatement, ZPlainFirebirdDriver, ZCompatibility,
   ZPlainFirebirdInterbaseConstants, ZDbcCachedResultSet, ZDbcLogging, ZMessages,
   ZVariant, ZClasses;
@@ -93,7 +95,7 @@ type
     NumSegments: Word;
     MaxSegmentSize: Word;
     BlobType: SmallInt;
-    TotalSize: LongInt;
+    TotalSize: Integer;
   end;
 
   { Base interface for sqlda }
@@ -451,7 +453,9 @@ const
     (Name: 'isc_tpb_lock_timeout';     ValueType: pvtNum;     Number: isc_tpb_lock_timeout)
   );
 
+{$ENDIF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 
 uses
   ZFastCode, Variants, ZSysUtils, Math, ZDbcInterbase6, ZDbcUtils, ZEncoding
@@ -860,21 +864,22 @@ var
   ErrorMessage, ErrorSqlMessage: RawByteString;
   ErrorCode: LongInt;
   aSQL: RawByteString;
+  Buf: TRawBuff;
 begin
   Result := 0;
-  if not StatusSucceeded(StatusVector) then 
-  begin
+  if not StatusSucceeded(StatusVector) then begin
+    Buf.Pos := 0;
     ErrorMessage := '';
     PStatusVector := @StatusVector;
-    while PlainDriver.isc_interprete(Msg, @PStatusVector) > 0 do
-      ErrorMessage := ErrorMessage + ' ' + Msg;
+    while PlainDriver.isc_interprete(@Msg[0], @PStatusVector) > 0 do
+      ToBuff(PAnsiChar(@Msg[0]), ZFastcode.StrLen(@Msg[0]), Buf, ErrorMessage);
+    FlushBuff(Buf, ErrorMessage);
 
     ErrorCode := PlainDriver.isc_sqlcode(@StatusVector);
-    PlainDriver.isc_sql_interprete(ErrorCode, Msg, 1024);
-    ErrorSqlMessage := Msg;
+    PlainDriver.isc_sql_interprete(ErrorCode, @Msg[0], 1024);
+    ZSetString(@Msg[0], StrLen(@Msg[0]), ErrorSqlMessage);
 
-    if ErrorMessage <> '' then
-    begin
+    if ErrorMessage <> '' then begin
       if SQL <> ''
       then aSQL := ' The SQL: '+SQL+'; '
       else aSQL := '';
@@ -1162,18 +1167,15 @@ begin
           ClientVarManager.GetAsFloat(InParamValues[I]));
       stGUID, stString, stUnicodeString:
         begin
-          CP := ParamSqlData.GetIbSqlType(I);
-          case CP of
+          case ParamSqlData.GetIbSqlType(I) of
             SQL_TEXT, SQL_VARYING:
               begin
-                CP := ParamSqlData.GetIbSqlSubType(I);  //get code page
-                if CP > High(CodePageArray) then
-                  CharRec := ClientVarManager.GetAsCharRec(InParamValues[I], ConSettings^.ClientCodePage^.CP)
-                else
-                  CharRec := ClientVarManager.GetAsCharRec(InParamValues[I], CodePageArray[CP]);
+                if ConSettings^.ClientCodePage^.ID = CS_NONE
+                then CP := CodePageArray[ParamSqlData.GetIbSqlSubType(I) and 255]  //get code page
+                else CP := ConSettings^.ClientCodePage^.CP;
+                CharRec := ClientVarManager.GetAsCharRec(InParamValues[I], CP);
               end;
-            else
-              CharRec := ClientVarManager.GetAsCharRec(InParamValues[I], ConSettings^.ClientCodePage^.CP)
+            else CharRec := ClientVarManager.GetAsCharRec(InParamValues[I], ConSettings^.ClientCodePage^.CP)
           end;
           ParamSqlData.UpdatePAnsiChar(I, CharRec.P, CharRec.Len);
         end;
@@ -1273,7 +1275,9 @@ begin
             begin
               case InParamValues[i].VArray.VIsNullArrayVariantType of
                 vtString: IsNull := StrToBoolEx(TStringDynArray(ZData)[j]);
+                {$IFNDEF NO_ANSISTRING}
                 vtAnsiString: IsNull := StrToBoolEx(TAnsiStringDynArray(ZData)[j]);
+                {$ENDIF}
                 vtUTF8String: IsNull := StrToBoolEx(TUTF8StringDynArray(ZData)[j]);
                 vtRawByteString: IsNull := StrToBoolEx(TRawByteStringDynArray(ZData)[j]);
                 vtUnicodeString: IsNull := StrToBoolEx(TUnicodeStringDynArray(ZData)[j]);
@@ -1325,11 +1329,11 @@ begin
                   end;
           stString, stUnicodeString:
             begin
-              CP := ParamSqlData.GetIbSqlSubType(ParamIndex);  //get code page
+              CP := ParamSqlData.GetIbSqlSubType(ParamIndex) and 255;  //get code page
               if CP <> CS_BINARY then begin
-                if (CP > High(CodePageArray)) or (CP = CS_NONE)
-                then CP := ConSettings^.ClientCodePage^.CP
-                else CP := CodePageArray[CP];
+                if ConSettings.ClientCodePage^.ID = CS_NONE
+                then CP := CodePageArray[CP]  //get code page
+                else CP := ConSettings.ClientCodePage^.CP;
                 case InParamValues[i].VArray.VArrayVariantType of
                   vtString: RawTemp := ConSettings.ConvFuncs.ZStringToRaw(TStringDynArray(ZData)[j], ConSettings.CTRL_CP, CP);
                   {$IFNDEF NO_ANSISTRING}
@@ -2869,10 +2873,10 @@ function GetExecuteBlockString(const ParamsSQLDA: IZParamsSQLDA;
   InitialStatementType: TZIbSqlStatementType;
   const XSQLDAMaxSize: LongWord): RawByteString;
 const
-  EBStart = AnsiString('EXECUTE BLOCK(');
-  EBBegin =  AnsiString(')AS BEGIN'+LineEnding);
-  EBSuspend =  AnsiString('SUSPEND;'+LineEnding); //required for RETURNING syntax
-  EBEnd = AnsiString('end');
+  EBStart = {$IFNDEF NO_ANSISTRING}AnsiString{$ELSE}RawByteString{$ENDIF}('EXECUTE BLOCK(');
+  EBBegin =  {$IFNDEF NO_ANSISTRING}AnsiString{$ELSE}RawByteString{$ENDIF}(')AS BEGIN'+LineEnding);
+  EBSuspend =  {$IFNDEF NO_ANSISTRING}AnsiString{$ELSE}RawByteString{$ENDIF}('SUSPEND;'+LineEnding); //required for RETURNING syntax
+  EBEnd = {$IFNDEF NO_ANSISTRING}AnsiString{$ELSE}RawByteString{$ENDIF}('end');
   LBlockLen = Length(EBStart)+Length(EBBegin)+Length(EBEnd);
 var
   IndexName, ArrayName: RawByteString;
@@ -3065,4 +3069,5 @@ begin
   Inc(PreparedRowsOfArray);
 end;
 
+{$ENDIF ZEOS_DISABLE_INTERBASE} //if set we have an empty unit
 end.

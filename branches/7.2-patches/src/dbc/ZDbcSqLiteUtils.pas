@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
   Classes, SysUtils,
   ZSysUtils, ZDbcIntfs, ZPlainSqLiteDriver, ZDbcLogging, ZCompatibility;
@@ -67,8 +68,8 @@ uses
   @result the SQLType field type value
 }
 function ConvertSQLiteTypeToSQLType(var TypeName: RawByteString;
-  UndefinedVarcharAsStringLength: Integer; var Precision: Integer;
-  var Decimals: Integer; CtrlsCPType: TZControlsCodePage): TZSQLType;
+  UndefinedVarcharAsStringLength: Integer; out Precision: Integer;
+  out Decimals: Integer; CtrlsCPType: TZControlsCodePage): TZSQLType;
 
 {**
   Checks for possible sql errors.
@@ -92,8 +93,9 @@ procedure CheckSQLiteError(const PlainDriver: IZSQLitePlainDriver;
 }
 function ConvertSQLiteVersionToSQLVersion(SQLiteVersion: PAnsiChar ): Integer;
 
-
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings, {$ENDIF}
   ZMessages, ZFastCode, ZClasses;
@@ -106,8 +108,8 @@ uses {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings, {$ENDIF}
   @result the SQLType field type value
 }
 function ConvertSQLiteTypeToSQLType(var TypeName: RawByteString;
-  UndefinedVarcharAsStringLength: Integer; var Precision: Integer;
-  var Decimals: Integer; CtrlsCPType: TZControlsCodePage): TZSQLType;
+  UndefinedVarcharAsStringLength: Integer; out Precision: Integer;
+  out Decimals: Integer; CtrlsCPType: TZControlsCodePage): TZSQLType;
 var
   pBL, pBR, pC: Integer;
   P: PAnsiChar;
@@ -261,5 +263,6 @@ begin
   Result := EncodeSQLVersioning(MajorVersion,MinorVersion,SubVersion);
 end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 end.
 

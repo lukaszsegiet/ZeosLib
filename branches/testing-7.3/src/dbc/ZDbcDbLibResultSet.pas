@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses
 {$IFNDEF FPC}
   DateUtils,
@@ -86,7 +87,7 @@ type
     protected
       FCheckDbDead: Boolean;
     public
-      constructor Create(Connection: IZDBLibConnection; const CheckDbDead: Boolean); virtual;
+      constructor Create(Connection: IZDBLibConnection; const CheckDbDead: Boolean); reintroduce;
       function Next: Boolean; override;
       procedure GetColData(ColIndex: Integer; out DatPtr: Pointer; out DatLen: Integer); override;
   end;
@@ -122,7 +123,7 @@ type
   end;
 
   {** Implements DBLib ResultSet. }
-  TZDBLibResultSet = class(TZAbstractResultSet)
+  TZDBLibResultSet = class(TZSimpleResultSet)
   private
     FSQL: string;
     FCheckDBDead: Boolean;
@@ -142,14 +143,12 @@ type
       UserEncoding: TZCharEncoding = ceDefault);
     destructor Destroy; override;
 
-    procedure Close; override;
+    procedure BeforeClose; override;
 
     function IsNull(ColumnIndex: Integer): Boolean; override;
     function GetPAnsiChar(ColumnIndex: Integer; out Len: NativeUInt): PAnsiChar; override;
     function GetUnicodeString(ColumnIndex: Integer): ZWideString; override;
     function GetBoolean(ColumnIndex: Integer): Boolean; override;
-    function GetByte(ColumnIndex: Integer): Byte; override;
-    function GetSmall(ColumnIndex: Integer): SmallInt; override;
     function GetInt(ColumnIndex: Integer): Integer; override;
     function GetLong(ColumnIndex: Integer): Int64; override;
     function GetFloat(ColumnIndex: Integer): Single; override;
@@ -175,11 +174,12 @@ type
       OldRowAccessor, NewRowAccessor: TZRowAccessor); override;
   end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
 uses ZMessages, ZDbcLogging, ZDbcDBLibUtils, ZEncoding, ZSysUtils, ZFastCode, ZClasses
-  {$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF}
-;
+  {$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
 
 constructor TZAbstractDblibDataProvider.Create(Connection: IZDBLibConnection);
 begin
@@ -236,7 +236,6 @@ end;
 function TZCachedDblibDataProvider.Next: Boolean;
 var
   currentRow: TZCachedDblibRow;
-  x: Integer;
 begin
   Result := false;
   if Assigned(FRootRow) then begin
@@ -373,7 +372,7 @@ label AssignGeneric;
     Result := PRawToUnicode(P, ZFastCode.StrLen(P), ConSettings^.ClientCodePage^.CP);
     {$ELSE}
     ZSetString(P, ZFastCode.StrLen(P), Result);
-    Result := ConSettings^.ConvFuncs.ZRawToString(tdsColInfo.ActualName,
+    Result := ConSettings^.ConvFuncs.ZRawToString(Result,
           ConSettings^.ClientCodePage^.CP, ConSettings^.CTRL_CP);
     {$ENDIF}
   end;
@@ -462,7 +461,7 @@ end;
   sequence of multiple results. A <code>ResultSet</code> object
   is also automatically closed when it is garbage collected.
 }
-procedure TZDBLibResultSet.Close;
+procedure TZDBLibResultSet.BeforeClose;
 begin
 { TODO -ofjanos -cGeneral : Maybe it needs a dbcanquery here. }
   if FDataProvider.needDbCanQuery then
@@ -471,7 +470,7 @@ begin
         if FPlainDriver.dbCanQuery(FHandle) <> DBSUCCEED then
           FDBLibConnection.CheckDBLibError(lcDisconnect, 'CLOSE QUERY');
   FHandle := nil;
-  inherited Close;
+  inherited BeforeClose;
 end;
 
 {**
@@ -744,74 +743,6 @@ end;
 {**
   Gets the value of the designated column in the current row
   of this <code>ResultSet</code> object as
-  a <code>byte</code> in the Java programming language.
-
-  @param columnIndex the first column is 1, the second is 2, ...
-  @return the column value; if the value is SQL <code>NULL</code>, the
-    value returned is <code>0</code>
-}
-function TZDBLibResultSet.GetByte(ColumnIndex: Integer): Byte;
-var
-  DL: Integer;
-  Data: Pointer;
-  DT: TTDSType;
-begin
-  DT := DBLibColTypeCache[ColumnIndex{$IFNDEF GENERIC_INDEX}-1{$ENDIF}];
-  {$IFDEF GENERIC_INDEX}
-  ColumnIndex := ColumnIndex +1; //DBLib -----> Col/Param starts whith index 1
-  {$ENDIF}
-  FDataProvider.GetColData(ColumnIndex, Data, DL); //hint DBLib isn't #0 terminated @all
-
-  LastWasNull := Data = nil;
-  Result := 0;
-  if Data <> nil then
-  begin
-    if DT = tdsInt1 then
-      Result := PByte(Data)^
-    else
-      FPlainDriver.dbconvert(FHandle, Ord(DT), Data, DL, Ord(tdsInt1),
-        @Result, SizeOf(Result));
-  end;
-  FDBLibConnection.CheckDBLibError(lcOther, 'GETBYTE');
-end;
-
-{**
-  Gets the value of the designated column in the current row
-  of this <code>ResultSet</code> object as
-  a <code>short</code> in the Java programming language.
-
-  @param columnIndex the first column is 1, the second is 2, ...
-  @return the column value; if the value is SQL <code>NULL</code>, the
-    value returned is <code>0</code>
-}
-function TZDBLibResultSet.GetSmall(ColumnIndex: Integer): SmallInt;
-var
-  DL: Integer;
-  Data: Pointer;
-  DT: TTDSType;
-begin
-  DT := DBLibColTypeCache[ColumnIndex{$IFNDEF GENERIC_INDEX}-1{$ENDIF}];
-  {$IFDEF GENERIC_INDEX}
-  ColumnIndex := ColumnIndex +1; //DBLib -----> Col/Param starts whith index 1
-  {$ENDIF}
-  FDataProvider.GetColData(ColumnIndex, Data, DL); //hint DBLib isn't #0 terminated @all
-
-  LastWasNull := Data = nil;
-  Result := 0;
-  if Data <> nil then
-  begin
-    if DT = tdsInt2 then
-      Result := PSmallInt(Data)^
-    else
-      FPlainDriver.dbconvert(FHandle, Ord(DT), Data, DL, Ord(tdsInt2),
-        @Result, SizeOf(Result));
-  end;
-  FDBLibConnection.CheckDBLibError(lcOther, 'GetSmall');
-end;
-
-{**
-  Gets the value of the designated column in the current row
-  of this <code>ResultSet</code> object as
   an <code>int</code> in the Java programming language.
 
   @param columnIndex the first column is 1, the second is 2, ...
@@ -834,7 +765,7 @@ begin
   Result := 0;
   if Data <> nil then
     if DT = tdsInt4 then
-      Result := PLongint(Data)^
+      Result := PInteger(Data)^
     else
       FPlainDriver.dbconvert(FHandle, Ord(DT), Data, DL, Ord(tdsInt4),
         @Result, SizeOf(Result));
@@ -865,11 +796,14 @@ begin
 
   Result := 0;
   if Data <> nil then
-    if DT = tdsInt8 then //sybase only
-      Result := PInt64(Data)^
-    else
-      FPlainDriver.dbconvert(FHandle, Ord(DT), Data, DL, Ord(tdsInt8),
+    case DT of
+      tdsInt1: Result := PByte(Data)^;
+      tdsInt2: Result := PSmallInt(Data)^;
+      tdsInt4: Result := PInteger(Data)^;
+      tdsInt8: Result := PInt64(Data)^;
+      else FPlainDriver.dbconvert(FHandle, Ord(DT), Data, DL, Ord(tdsInt8),
         @Result, SizeOf(Int64));
+    end;
   FDBLibConnection.CheckDBLibError(lcOther, 'GETLONG');
 end;
 
@@ -1210,6 +1144,5 @@ begin
     end;
   end;
 end;
-
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.
-

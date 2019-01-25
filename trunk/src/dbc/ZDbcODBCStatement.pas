@@ -55,6 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_ODBC} //if set we have an empty unit
 uses Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZCompatibility, ZDbcIntfs, ZDbcStatement, ZVariant, ZDbcProperties,
   ZDbcODBCCon, ZPlainODBCDriver;
@@ -123,7 +124,7 @@ type
 
     procedure Prepare; override;
     procedure Unprepare; override;
-    procedure Close; override;
+    procedure AfterClose; override;
     procedure Cancel; override;
 
 
@@ -150,7 +151,9 @@ type
     procedure Prepare; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_ODBC} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_ODBC} //if set we have an empty unit
 
 uses Math, DateUtils,
   ZSysUtils, ZMessages, ZEncoding, ZDbcUtils, ZDbcResultSet, ZFastCode, ZDbcLogging,
@@ -241,9 +244,8 @@ begin
     SetLength(fBatchLobBuf[i], 0);
 end;
 
-procedure TZAbstractODBCStatement.Close;
+procedure TZAbstractODBCStatement.AfterClose;
 begin
-  inherited Close;
   if Assigned(fHSTMT) then begin
     fPlainDriver.SQLFreeHandle(SQL_HANDLE_STMT, fHSTMT);
     fHSTMT := nil;
@@ -2166,6 +2168,7 @@ begin
     if Assigned(fHSTMT) and Assigned(fPHDBC^) then
       CheckStmtError(fPlainDriver.SQLFreeStmt(fHSTMT,SQL_CLOSE));
 end;
+{$ENDIF ZEOS_DISABLE_ODBC} //if set we have an empty unit
 
 end.
 

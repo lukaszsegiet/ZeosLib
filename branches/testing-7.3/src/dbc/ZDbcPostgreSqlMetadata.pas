@@ -56,6 +56,7 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 uses
   Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcIntfs, ZDbcMetadata, ZCompatibility, ZDbcPostgreSqlUtils,
@@ -87,17 +88,12 @@ type
   // technobot 2008-06-27 - methods moved as is from TZPostgreSQLDatabaseMetadata:
   {** Implements PostgreSQL Database Information. }
   TZPostgreSQLDatabaseInfo = class(TZAbstractDatabaseInfo, IZPostgreSQLDatabaseInfo)
-  private
-    fSupportsDMLBatches: Boolean;
   protected
     function GetMaxIndexKeys: Integer;
     function GetMaxNameLength: Integer;
 //    function UncachedGetUDTs(const Catalog: string; const SchemaPattern: string;
 //      const TypeNamePattern: string; const Types: TIntegerDynArray): IZResultSet; override;
   public
-    constructor Create(const Metadata: TZAbstractDatabaseMetadata);
-    destructor Destroy; override;
-
     // database/driver/server info:
     function GetDatabaseProductName: string; override;
     function GetDatabaseProductVersion: string; override;
@@ -256,8 +252,8 @@ type
     function CreateDatabaseInfo: IZDatabaseInfo; override; // technobot 2008-06-27
 
     // (technobot) should any of these be moved to TZPostgreSQLDatabaseInfo?:
-    function GetPostgreSQLType(Oid: Integer): string;
-    function GetSQLTypeByOid(Oid: Integer): TZSQLType;
+    function GetPostgreSQLType(Oid: OID): string;
+    function GetSQLTypeByOid(Oid: OID; AttTypMod: Integer): TZSQLType;
     function GetSQLTypeByName(const TypeName: string): TZSQLType;
     function TableTypeSQLExpression(const TableType: string; UseSchemas: Boolean):
       string;
@@ -306,33 +302,15 @@ type
     procedure ClearCache; override;
  end;
 
+{$ENDIF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 
 uses
   //Math,
   ZFastCode, ZMessages, ZSysUtils, ZDbcPostgreSql;
 
 { TZPostgreSQLDatabaseInfo }
-
-{**
-  Constructs this object.
-  @param Metadata the interface of the correpsonding database metadata object
-}
-constructor TZPostgreSQLDatabaseInfo.Create(const Metadata: TZAbstractDatabaseMetadata);
-var PlainDriver: TZPostgreSQLPlainDriver;
-begin
-  inherited Create(Metadata);
-  PlainDriver := TZPostgreSQLPlainDriver(Metadata.GetConnection.GetIZPlainDriver.GetInstance);
-  fSupportsDMLBatches := Assigned(PlainDriver.PQexecParams) and Assigned(PlainDriver.PQexecPrepared);
-end;
-
-{**
-  Destroys this object and cleanups the memory.
-}
-destructor TZPostgreSQLDatabaseInfo.Destroy;
-begin
-  inherited;
-end;
 
 //----------------------------------------------------------------------
 // First, a variety of minor information about the target database.
@@ -761,7 +739,7 @@ end;
 }
 function TZPostgreSQLDatabaseInfo.SupportsArrayBindings: Boolean;
 begin
-  Result := fSupportsDMLBatches;
+  Result := HasMinimumServerVersion(9, 2);
 end;
 
 function TZPostgreSQLDatabaseInfo.SupportsCatalogsInDataManipulation: Boolean;
@@ -1552,7 +1530,8 @@ function TZPostgreSQLDatabaseMetadata.UncachedGetProcedureColumns(const Catalog:
   end;
 
 var
-  I, ReturnType, ColumnTypeOid, ArgOid: Integer;
+  I, ReturnType: Integer;
+  ColumnTypeOid, ArgOid: OID;
   SQL, ReturnTypeType: string;
   IsInParam, IsOutParam: Boolean;
   ArgTypes, ArgNames, ArgModes: TStrings;
@@ -1670,40 +1649,32 @@ begin
 
           InsertProcedureColumnRow(Result, GetStringByName('nspname'),
             GetStringByName('proname'), ColumnName, ColumnType,
-            Ord(GetSQLTypeByOid(ArgOid)), GetPostgreSQLType(ArgOid),
+            Ord(GetSQLTypeByOid(ArgOid, -1)), GetPostgreSQLType(ArgOid),
             Ord(ntNullableUnknown));
         end;
 
         if (OutParamCount > 0) then
           Continue;
 
-        if (ReturnTypeType = 'c') then // Extract composit type columns
-        begin
+        if (ReturnTypeType = 'c') then begin // Extract composit type columns
           ColumnsRS := GetConnection.CreateStatement.ExecuteQuery(
             Format('SELECT a.attname,a.atttypid'
               + ' FROM pg_catalog.pg_attribute a WHERE a.attrelid=%s'
               + ' ORDER BY a.attnum',
               [ResultSet.GetStringByName('typrelid')]));
-          while ColumnsRS.Next do
-          begin
-            ColumnTypeOid := ColumnsRS.GetIntByName('atttypid');
+          while ColumnsRS.Next do begin
+            ColumnTypeOid := ColumnsRS.GetUIntByName('atttypid');
             InsertProcedureColumnRow(Result, GetStringByName('nspname'),
               GetStringByName('proname'), ColumnsRS.GetStringByName('attname'),
-              Ord(pctResultSet), Ord(GetSQLTypeByOid(ColumnTypeOid)),
+              Ord(pctResultSet), Ord(GetSQLTypeByOid(ColumnTypeOid, -1)),
               GetPostgreSQLType(ColumnTypeOid), Ord(ntNullableUnknown));
           end;
           ColumnsRS.Close;
-        end
-        else
-        begin
-          if (ReturnTypeType <> 'p') then // Single non-pseudotype return value
-          begin
-            InsertProcedureColumnRow(Result, GetStringByName('nspname'),
-              GetStringByName('proname'), 'returnValue', Ord(pctReturn),
-              Ord(GetSQLTypeByOid(ReturnType)), GetPostgreSQLType(ReturnType),
-              Ord(ntNullableUnknown));
-          end;
-        end;
+        end else if (ReturnTypeType <> 'p') then // Single non-pseudotype return value
+          InsertProcedureColumnRow(Result, GetStringByName('nspname'),
+            GetStringByName('proname'), 'returnValue', Ord(pctReturn),
+            Ord(GetSQLTypeByOid(ReturnType, -1)), GetPostgreSQLType(ReturnType),
+            Ord(ntNullableUnknown));
       end;
       Close;
     end;
@@ -2531,19 +2502,19 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        //Result.UpdatePAnsiChar(ImportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), @Len);
-        //Result.UpdatePAnsiChar(ImportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), @Len);
+        //Result.UpdatePAnsiChar(ImportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), Len);
+        //Result.UpdatePAnsiChar(ImportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), Len);
         Result.UpdateSmall(ImportedKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index));
         Result.UpdateSmall(ImportedKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index))));
         Result.UpdateSmall(ImportedKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index))));
-        Result.UpdatePAnsiChar(ImportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ImportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), Len);
         if GetString(tc_is_deferrable_Index) = 'NO' then
           Result.UpdateSmall(ImportedKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
@@ -2685,19 +2656,19 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        //Result.UpdatePAnsiChar(ExportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), @Len);
-        //Result.UpdatePAnsiChar(ExportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), @Len);
+        //Result.UpdatePAnsiChar(ExportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), Len);
+        //Result.UpdatePAnsiChar(ExportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), Len);
         Result.UpdateSmall(ExportedKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index));
         Result.UpdateSmall(ExportedKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index))));
         Result.UpdateSmall(ExportedKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index))));
-        Result.UpdatePAnsiChar(ExportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), @Len);
-        Result.UpdatePAnsiChar(ExportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), Len);
         if GetString(tc_is_deferrable_Index) = 'NO' then
           Result.UpdateSmall(ExportedKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
@@ -2871,19 +2842,19 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        //Result.UpdatePAnsiChar(CrossRefKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index_74, Len), @Len);
-        //Result.UpdatePAnsiChar(CrossRefKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index_74, Len), @Len);
+        //Result.UpdatePAnsiChar(CrossRefKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index_74, Len), Len);
+        //Result.UpdatePAnsiChar(CrossRefKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index_74, Len), Len);
         Result.UpdateSmall(CrossRefKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index_74));
         Result.UpdateSmall(CrossRefKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index_74))));
         Result.UpdateSmall(CrossRefKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index_74))));
-        Result.UpdatePAnsiChar(CrossRefKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index_74, Len), @Len);
-        Result.UpdatePAnsiChar(CrossRefKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index_74, Len), Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index_74, Len), Len);
         if GetString(tc_is_deferrable_Index_74) = 'NO' then
           Result.UpdateSmall(CrossRefKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
@@ -2970,10 +2941,10 @@ begin
         while Next do
         begin
           Result.MoveToInsertRow;
-          Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(pnspname_index, Len), @Len);
-          Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(fnspname_index, Len), @Len);
-          Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(prelname_index, Len), @Len);
-          Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(frelname_index, Len), @Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(pnspname_index, Len), Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(fnspname_index, Len), Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(prelname_index, Len), Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(frelname_index, Len), Len);
 
           //FKeyName := GetString(t1_tgconstrname_index);
           UpdateRule := GetString(updaterule_index);
@@ -3116,7 +3087,7 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdatePAnsiChar(TypeInfoTypeNameIndex, GetPAnsiChar(FirstDbcIndex, Len), @Len);
+        Result.UpdatePAnsiChar(TypeInfoTypeNameIndex, GetPAnsiChar(FirstDbcIndex, Len), Len);
         Result.UpdateInt(TypeInfoDataTypeIndex, Ord(GetSQLTypeByName(GetString(FirstDbcIndex))));
         Result.UpdateInt(TypeInfoPecisionIndex, 9);
         Result.UpdateInt(TypeInfoNullAbleIndex, Ord(ntNoNulls));
@@ -3258,18 +3229,19 @@ begin
     end;
 end;
 
-function TZPostgreSQLDatabaseMetadata.GetPostgreSQLType(Oid: Integer): string;
+function TZPostgreSQLDatabaseMetadata.GetPostgreSQLType(Oid: OID): string;
 begin
   Result := (GetConnection as IZPostgreSQLConnection).GetTypeNameByOid(Oid);
 end;
 
-function TZPostgreSQLDatabaseMetadata.GetSQLTypeByOid(Oid: Integer): TZSQLType;
+function TZPostgreSQLDatabaseMetadata.GetSQLTypeByOid(Oid: OID; AttTypMod: Integer): TZSQLType;
 var
   PostgreSQLConnection: IZPostgreSQLConnection;
 begin
   PostgreSQLConnection := GetConnection as IZPostgreSQLConnection;
-  Result := PostgreSQLToSQLType(PostgreSQLConnection,
-    PostgreSQLConnection.GetTypeNameByOid(Oid));
+  Result := ZDbcPostgreSQLUtils.PostgreSQLToSQLType(ConSettings, PostgreSQLConnection.IsOidAsBlob, OID, AttTypMod);
+  if Result = stUnknown then
+    Result := PostgreSQLToSQLType(PostgreSQLConnection, PostgreSQLConnection.GetTypeNameByOid(Oid));
 end;
 
 function TZPostgreSQLDatabaseMetadata.InternalUncachedGetColumns(const Catalog,
@@ -3377,12 +3349,12 @@ begin
 
       Result.MoveToInsertRow;
       if not IsNull(cnspname_index) then
-        Result.UpdatePAnsiChar(CatalogNameIndex, GetPAnsiChar(cnspname_index, Len), @Len);
+        Result.UpdatePAnsiChar(CatalogNameIndex, GetPAnsiChar(cnspname_index, Len), Len);
       if not IsNull(nspname_index) then
-        Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(nspname_index, Len), @Len);
-      Result.UpdatePAnsiChar(TableNameIndex, GetPAnsiChar(relname_index, Len), @Len);
-      Result.UpdatePAnsiChar(ColumnNameIndex, GetPAnsiChar(attname_index, Len), @Len);
-      SQLType := GetSQLTypeByOid(TypeOid);
+        Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(nspname_index, Len), Len);
+      Result.UpdatePAnsiChar(TableNameIndex, GetPAnsiChar(relname_index, Len), Len);
+      Result.UpdatePAnsiChar(ColumnNameIndex, GetPAnsiChar(attname_index, Len), Len);
+      SQLType := GetSQLTypeByOid(TypeOid, AttTypMod);
       Result.UpdateInt(TableColColumnTypeIndex, Ord(SQLType));
       Result.UpdateString(TableColColumnTypeNameIndex, PgType);
 
@@ -3401,55 +3373,41 @@ FillSizes:
             Result.UpdateInt(TableColColumnBufLengthIndex, (Precision+1) shl 1);
             Result.UpdateInt(TableColColumnCharOctetLengthIndex, Precision shl 1);
           end;
-        end else
-          if (PgType = 'varchar') then
-            if ( (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength = 0 ) then
-            begin
-              Result.UpdateInt(TableColColumnTypeIndex, Ord(GetSQLTypeByOid(25))); //Assume text-lob instead
-              Result.UpdateInt(TableColColumnSizeIndex, 0); // need no size for streams
-            end
-            else begin //keep the string type but with user defined count of chars
-              Precision := (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength;
-              goto FillSizes;
-            end
-          else
-            Result.UpdateInt(TableColColumnSizeIndex, 0);
-      end
-      else if (PgType = 'uuid') then
-      begin
+        end else if (PgType = 'varchar') then
+          if ( (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength = 0 ) then begin
+            Result.UpdateInt(TableColColumnTypeIndex, Ord(GetSQLTypeByOid(25, -1))); //Assume text-lob instead
+            Result.UpdateInt(TableColColumnSizeIndex, 0); // need no size for streams
+          end else begin //keep the string type but with user defined count of chars
+            Precision := (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength;
+            goto FillSizes;
+          end
+        else
+          Result.UpdateInt(TableColColumnSizeIndex, 0);
+      end else if (PgType = 'uuid') then begin
         // I set break point and see code reaching here. Below assignments, I have no idea what I am doing.
-        Result.UpdateInt(TableColColumnBufLengthIndex, 16); // MSSQL returns 16 here - which makes sense since a GUID is 16 bytes long.
-        // TableColColumnCharOctetLengthIndex is removed - PG returns 0 and in the dblib driver 0 is also used, although MSSQL returns null...
-      end
-      else if (PgType = 'numeric') or (PgType = 'decimal') then
-      begin
+        Result.UpdateInt(TableColColumnCharOctetLengthIndex, 16); // MSSQL returns 16 here - which makes sense since a GUID is 16 bytes long.
+        Result.UpdateInt(TableColColumnSizeIndex, 38); //maximum visible characters
+      end else if (PgType = 'numeric') or (PgType = 'decimal') then begin
         Result.UpdateInt(TableColColumnSizeIndex, ((AttTypMod - 4) div 65536)); //precision
         Result.UpdateInt(TableColColumnDecimalDigitsIndex, ((AttTypMod -4) mod 65536)); //scale
         Result.UpdateInt(TableColColumnNumPrecRadixIndex, 10); //base? ten as default
-      end
-      else if (PgType = 'bit') or (PgType = 'varbit') then
-      begin
+      end else if (PgType = 'bit') or (PgType = 'varbit') then begin
         Result.UpdateInt(TableColColumnSizeIndex, AttTypMod);
         Result.UpdateInt(TableColColumnNumPrecRadixIndex, 2);
-      end
-      else
-      begin
+      end else begin
         Result.UpdateInt(TableColColumnSizeIndex, GetInt(attlen_index));
         Result.UpdateInt(TableColColumnNumPrecRadixIndex, 2);
       end;
-      if GetBoolean(attnotnull_index) then
-      begin
+      if GetBoolean(attnotnull_index) then begin
         Result.UpdateString(TableColColumnIsNullableIndex, 'NO');
         Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNoNulls));
-      end
-      else
-      begin
+      end else begin
         Result.UpdateString(TableColColumnIsNullableIndex, 'YES');
         Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNullable));
       end;
 
-      Result.UpdatePAnsiChar(TableColColumnRemarksIndex, GetPAnsiChar(description_index {description}, Len), @Len);
-      Result.UpdatePAnsiChar(TableColColumnColDefIndex, GetPAnsiChar(adsrc_index {adsrc}, Len), @Len);
+      Result.UpdatePAnsiChar(TableColColumnRemarksIndex, GetPAnsiChar(description_index {description}, Len), Len);
+      Result.UpdatePAnsiChar(TableColColumnColDefIndex, GetPAnsiChar(adsrc_index {adsrc}, Len), Len);
       Result.UpdateInt(TableColColumnCharOctetLengthIndex, Result.GetInt(attlen_index));
       Result.UpdateInt(TableColColumnOrdPosIndex, GetInt(attnum_index));
 
@@ -3467,9 +3425,10 @@ end;
 
 function TZPostgreSQLDatabaseMetadata.GetSQLTypeByName(
   const TypeName: string): TZSQLType;
+var PGConn: IZPostgreSQLConnection;
 begin
-  Result := PostgreSQLToSQLType(
-    GetConnection as IZPostgreSQLConnection, TypeName);
+  PGConn := GetConnection as IZPostgreSQLConnection;
+  Result := PostgreSQLToSQLType(PGConn, TypeName);
 end;
 
 function TZPostgreSQLDatabaseMetadata.TableTypeSQLExpression(
@@ -3660,7 +3619,7 @@ begin
     while Next do
     begin
       Result.MoveToInsertRow;
-      Result.UpdatePAnsiChar(CharacterSetsNameIndex, GetPAnsiChar(name_Index, Len), @Len); //CHARACTER_SET_NAME
+      Result.UpdatePAnsiChar(CharacterSetsNameIndex, GetPAnsiChar(name_Index, Len), Len); //CHARACTER_SET_NAME
       Result.UpdateSmall(CharacterSetsIDIndex, GetSmall(enc_Index)); //CHARACTER_SET_ID
       Result.InsertRow;
     end;
@@ -3702,22 +3661,20 @@ end;
 function TZPostgreSQLIdentifierConvertor.IsSpecialCase(
   const Value: string): Boolean;
 var
-  I: Integer;
+  P, PEnd: PChar;
 begin
   Result := False;
-  if not CharInSet(Value[1], ['a'..'z','_']) then
-  begin
+  P := Pointer(Value);
+  if (P = nil) or not (Ord(P^) in [Ord('a')..Ord('z'),Ord('_')]) then begin
     Result := True;
     Exit;
   end;
-  for I := 1 to Length(Value) do
-  begin
-    if not CharInSet(Value[I], ['A'..'Z','a'..'z','0'..'9','_']) then
-    begin
+  PEnd := P+Length(Value);
+  while P < PEnd do
+    if not (Ord(P^) in [Ord('A')..Ord('Z'),Ord('a')..Ord('z'),Ord('0')..Ord('9'),Ord('_')]) then begin
       Result := True;
       Break;
     end;
-  end;
 end;
 
 function TZPostgreSQLIdentifierConvertor.Quote(const Value: string): string;
@@ -3738,4 +3695,5 @@ begin
   end;
 end;
 
+{$ENDIF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 end.
